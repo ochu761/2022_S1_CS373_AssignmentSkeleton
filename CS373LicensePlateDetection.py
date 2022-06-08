@@ -60,8 +60,9 @@ def createInitializedGreyscalePixelArray(image_width, image_height, initValue = 
 def computeHistogram(pixel_array, image_width, image_height, nr_bins):
 
     histogram = [0 for i in range(nr_bins)]
+    bin_sum = [0 for i in range(nr_bins)]
 
-    binWidth = math.ceil(255/nr_bins)
+    bin_width = math.ceil(255/nr_bins)
     
     for i in range(image_height):
         for j in range(image_width):
@@ -69,9 +70,12 @@ def computeHistogram(pixel_array, image_width, image_height, nr_bins):
             # 255/8 = 31.875
             # if p = 255, 255/31.875 = 8
             
-            histogram[math.floor(pixel_array[i][j]/binWidth)] += 1
+            bin_index = math.floor(pixel_array[i][j]/bin_width)
+            
+            histogram[bin_index] += 1
+            bin_sum[bin_index] += pixel_array[i][j]
 
-    return histogram
+    return [histogram, bin_sum]
 
 def convertToGreyscale(r, g, b, image_width, image_height):
     for y in range(image_height):
@@ -162,15 +166,40 @@ def simpleThresholdToBinary(px_array, image_width, image_height, threshold=150, 
     for y in range(image_height):
         for x in range(image_width):
             # reuse px_array as output array as will not be impacted by subsequent iterations
-            if px_array[y][x] <= threshold: 
-                px_array[y][x] = min
+            if px_array[y][x] <= threshold: px_array[y][x] = min
             else: px_array[y][x] = max
     
     return px_array
 
-def adaptiveThresholdToBinary(px_array, image_width, image_height, threshold=150):
-    #TODO
-    pass
+def adaptiveThresholdToBinary(px_array, image_width, image_height, min=0, max=255):
+    nr_bins = 32
+    [histogram, bin_sum] = computeHistogram(px_array, image_width, image_height, nr_bins)
+    bin_width = math.ceil(255/nr_bins)
+
+    threshold = sum(bin_sum) / sum(histogram)
+    print(threshold)
+
+    while True:
+        threshold_index = math.floor(threshold/bin_width)
+
+        lower_count = histogram[:threshold_index]
+        lower_sum = bin_sum[:threshold_index]
+        upper_count = histogram[threshold_index+1:]
+        upper_sum = bin_sum[threshold_index+1:]
+
+        lower_mean = sum(lower_sum) / sum(lower_count)
+        upper_mean = sum(upper_sum) / sum(upper_count)
+
+        new_threshold = 0.5 * (lower_mean + upper_mean)
+        print(new_threshold)
+
+        if new_threshold == threshold:
+            threshold = new_threshold
+            break
+
+        threshold = new_threshold
+
+    return simpleThresholdToBinary(px_array, image_width, image_height, threshold, min, max)
 
 
 
@@ -268,8 +297,8 @@ def isInBounds(x,y,width,height):
     
     return False
 
-def isolateLargestComponent(px_array, components, image_width, image_height, min=0, max=255):
-    largest_component = computeLargestComponent(components)
+def isolateLargestValidComponent(px_array, components, image_width, image_height, min=0, max=255):
+    largest_component = computeLargestValidComponent(components)
     
     for y in range(image_height):
         for x in range(image_width):
@@ -295,18 +324,14 @@ def computeComponentBoundingBox(px_array, component, image_width, image_height):
 
     return [min_x, max_x, min_y, max_y]
 
-def computeLargestComponent(components):
-    largest_count = 0
-    largest_component = 0 # null value, labelling always starts at 1 (see computeConnectedComponentLabeling)
+def computeLargestValidComponent(components):
+    components = orderComponentsByLargest(components)
+    print(components)
+    print(components[0][0])
+    return components[0][0]
 
-    for component, count in components.items():
-        if count > largest_count:
-            largest_count = count
-            largest_component = component
-
-    return largest_component
-
-
+def orderComponentsByLargest(components):
+    return sorted(components.items(), key=lambda item: item[1], reverse=True)
 
 
    
@@ -355,7 +380,7 @@ def main():
     # this is the default input image filename
     # pass: 1, 3
     # fail: 2
-    input_filename = "numberplate3.png"
+    input_filename = "numberplate1.png"
 
     if command_line_arguments != []:
         input_filename = command_line_arguments[0]
@@ -388,45 +413,59 @@ def main():
     # STUDENT IMPLEMENTATION here
 
     # Convert to greyscale
+    print("Converting image channels to single pixel array")
     #px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
     px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
 
     final_img = px_array
 
-     # Contrast stretching
+    # Contrast stretching
+    print("Applying contrast stretching")
     px_array = contrastStretch(px_array, image_width, image_height)
    
 
     # High contrast filtering
+    print("Computing standard deviation")
     px_array = computeStandardDeviationImage5x5(px_array, image_width, image_height)
+    print("Applying contrast stretching")
     px_array = contrastStretch(px_array, image_width, image_height)
 
     # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
-    px_array = simpleThresholdToBinary(px_array, image_width, image_height, 150, 0, 1)
+    print("Computing and applying threshold")
+    final_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, 150, 0, 1)
+    #final_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
 
     # Morphological operations (repeat N_MORPH_OPS times for each)
-    N_MORPH_OPS = 3
+    N_MORPH_OPS = 5
 
     for i in range(N_MORPH_OPS):
+        print("Computing dilation #" + str(i))
         px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     for i in range(N_MORPH_OPS):
+        print("Computing erosion #" + str(i))
         px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     # Connected component analysis
-    [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
+    print("Computing connected components")
+    [final_array, c] = [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
     #final_img = isolateLargestComponent(px_array, components, image_width, image_height)
+    component = computeLargestValidComponent(components)
 
     # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
-    [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, computeLargestComponent(components), image_width, image_height)
-
+    print("Computing component bounding box")
+    [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, component, image_width, image_height)
+    #px_array = isolateLargestComponent(px_array, components, image_width, image_height)
 
 
 
 
     # Draw a bounding box as a rectangle into the input image
+    # axs1[1, 1].set_title('Final image of detection')
+    # axs1[1, 1].imshow(px_array, cmap='gray')
+    axs1[0, 1].set_title('Final pipeline image (px_array)')
+    axs1[0, 1].imshow(px_array, cmap='gray')
     axs1[1, 1].set_title('Final image of detection')
-    #axs1[1, 1].imshow(px_array, cmap='gray')
     axs1[1, 1].imshow(final_img, cmap='gray')
     rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
                      edgecolor='g', facecolor='none')
