@@ -82,20 +82,6 @@ def convertToGreyscale(r, g, b, image_width, image_height):
     return r
 
 
-def computeMinAndMaxValues(px_array, image_width, image_height):
-    min = 255
-    max = 0
-    
-    for y in range(image_height):
-        for x in range(image_width):
-            curVal = px_array[y][x]
-            if curVal < min:
-                min = curVal
-            if curVal > max:
-                max = curVal
-
-    return [min, max]
-
 def contrastStretch(px_array, image_width, image_height):
 
     [min, max] = computeMinAndMaxValues(px_array, image_width, image_height)
@@ -114,6 +100,21 @@ def contrastStretch(px_array, image_width, image_height):
             else: px_array[y][x] = sout
     
     return px_array
+
+def computeMinAndMaxValues(px_array, image_width, image_height):
+    min = 255
+    max = 0
+    
+    for y in range(image_height):
+        for x in range(image_width):
+            curVal = px_array[y][x]
+            if curVal < min:
+                min = curVal
+            if curVal > max:
+                max = curVal
+
+    return [min, max]
+
 
 
 def computeStandardDeviationImage5x5(px_array, image_width, image_height):
@@ -139,6 +140,8 @@ def computeStandardDeviationImage5x5(px_array, image_width, image_height):
             new_array[y][x] = math.sqrt(sum(variances)/len(neighbours))
             
     return new_array
+
+
 
 def simpleThresholdToBinary(px_array, image_width, image_height, threshold=150, min=0, max=255):
     for y in range(image_height):
@@ -197,10 +200,129 @@ def computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height):
 
 
 
+def computeConnectedComponentLabeling(pixel_array, image_width, image_height):
+    curLabel = 1
+    components = {}
+    new_array = createInitializedGreyscalePixelArray(image_width, image_height)
+    pixel_obj = [ [0]*image_width for i in range(image_height)]
+    
+    # create Pixel instance for each pixel
+    for y in range(image_height):
+        for x in range(image_width):
+            pixel_obj[y][x] = Pixel(x,y,pixel_array[y][x])
+    
+    for y in range(image_height):
+        for x in range(image_width):
+            if pixel_obj[y][x].isObj and not pixel_obj[y][x].isVisited:
+                q = Queue()
+
+                pixel_obj[y][x].isVisited = True
+                components.update({curLabel: 0})
+
+                q.enqueue(pixel_obj[y][x])
+                
+                while not q.isEmpty():
+                    front_pixel = q.dequeue()
+
+                    front_pixel.label = curLabel
+                    components.update({curLabel: components[curLabel] + 1})
+
+                    new_array[front_pixel.y][front_pixel.x] = curLabel
+                    
+                    f_x = front_pixel.x
+                    f_y = front_pixel.y
+
+                    # check neighbours
+                    neighbour_index = [ [-1,0],[1,0],[0,1],[0,-1] ]
+
+                    for iPos in neighbour_index:
+                        if isInBounds(f_x+iPos[0],f_y+iPos[1],image_width,image_height):
+                            p = pixel_obj[f_y+iPos[1]][f_x+iPos[0]]
+
+                            if p.isObj and not p.isVisited: 
+                                p.isVisited = True
+                                q.enqueue(p)
+                
+                curLabel += 1
+                
+    return [new_array, components]
+
+def isInBounds(x,y,width,height):
+    if x >= 0 and x < width and y >= 0 and y < height:
+        return True
+    
+    return False
+
+def isolateLargestComponent(px_array, components, image_width, image_height, min=0, max=255):
+    largest_component = computeLargestComponent(components)
+    
+    for y in range(image_height):
+        for x in range(image_width):
+            if px_array[y][x] != largest_component: px_array[y][x] = min
+            else: px_array[y][x] = max
+
+    return px_array
+
+def computeComponentBoundingBox(px_array, component, image_width, image_height):
+    min_x = image_width
+    max_x = 0
+    min_y = image_height
+    max_y = 0
+
+    for y in range(image_height):
+        for x in range(image_width):
+            if px_array[y][x] == component:
+                if x > max_x: max_x = x
+                if x < min_x: min_x = x
+                
+                if y > max_y: max_y = y
+                if y < min_y: min_y = y
+
+    return [min_x, max_x, min_y, max_y]
+
+def computeLargestComponent(components):
+    largest_count = 0
+    largest_component = 0 # null value, labelling always starts at 1 (see computeConnectedComponentLabeling)
+
+    for component, count in components.items():
+        if count > largest_count:
+            largest_count = count
+            largest_component = component
+
+    return largest_component
 
 
 
 
+   
+class Pixel:
+    def __init__(self, x, y, val):
+        self.x = x
+        self.y = y
+        self.val = val
+        self.label = 0
+        
+        if (val > 0): self.isObj = True
+        else: self.isObj = False
+        
+        self.isVisited = False
+
+
+class Queue:
+    def __init__(self):
+        self.items = []
+
+    def isEmpty(self):
+        return self.items == []
+
+    def enqueue(self, item):
+        self.items.insert(0,item)
+
+    def dequeue(self):
+        return self.items.pop()
+
+    def size(self):
+        return len(self.items)
 
 
 
@@ -250,6 +372,8 @@ def main():
 
     # Convert to greyscale
     px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
+    greyscale_img = px_array
+
      # Contrast stretching
     px_array = contrastStretch(px_array, image_width, image_height)
    
@@ -262,7 +386,7 @@ def main():
     px_array = simpleThresholdToBinary(px_array, image_width, image_height, 150, 0, 1)
 
     # Morphological operations (repeat N_MORPH_OPS times for each)
-    N_MORPH_OPS = 5
+    N_MORPH_OPS = 3
 
     for i in range(N_MORPH_OPS):
         px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
@@ -271,14 +395,18 @@ def main():
         px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     # Connected component analysis
+    [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
+    #px_array = isolateLargestComponent(px_array, components, image_width, image_height)
+    
 
     # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
-    center_x = image_width / 2.0
-    center_y = image_height / 2.0
-    bbox_min_x = center_x - image_width / 4.0
-    bbox_max_x = center_x + image_width / 4.0
-    bbox_min_y = center_y - image_height / 4.0
-    bbox_max_y = center_y + image_height / 4.0
+    # center_x = image_width / 2.0
+    # center_y = image_height / 2.0
+    # bbox_min_x = center_x - image_width / 4.0
+    # bbox_max_x = center_x + image_width / 4.0
+    # bbox_min_y = center_y - image_height / 4.0
+    # bbox_max_y = center_y + image_height / 4.0
+    [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, computeLargestComponent(components), image_width, image_height)
 
 
 
@@ -286,7 +414,7 @@ def main():
 
     # Draw a bounding box as a rectangle into the input image
     axs1[1, 1].set_title('Final image of detection')
-    axs1[1, 1].imshow(px_array, cmap='gray')
+    axs1[1, 1].imshow(greyscale_img, cmap='gray')
     rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
                      edgecolor='g', facecolor='none')
     axs1[1, 1].add_patch(rect)
