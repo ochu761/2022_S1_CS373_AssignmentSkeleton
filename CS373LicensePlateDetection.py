@@ -297,16 +297,6 @@ def isInBounds(x,y,width,height):
     
     return False
 
-def isolateLargestValidComponent(px_array, components, image_width, image_height, min=0, max=255):
-    largest_component = computeLargestValidComponent(components)
-    
-    for y in range(image_height):
-        for x in range(image_width):
-            if px_array[y][x] != largest_component: px_array[y][x] = min
-            else: px_array[y][x] = max
-
-    return px_array
-
 def computeComponentBoundingBox(px_array, component, image_width, image_height):
     min_x = image_width
     max_x = 0
@@ -324,11 +314,23 @@ def computeComponentBoundingBox(px_array, component, image_width, image_height):
 
     return [min_x, max_x, min_y, max_y]
 
-def computeLargestValidComponent(components):
+def computeLargestValidComponent(px_array, components, image_width, image_height):
     components = orderComponentsByLargest(components)
-    print(components)
-    print(components[0][0])
-    return components[0][0]
+    valid_components = []
+
+    for component in components:
+        [min_x, max_x, min_y, max_y] = computeComponentBoundingBox(px_array, component[0], image_width, image_height)
+
+        if max_y - min_y == 0: 
+            ratio = 0
+        else: 
+            ratio = (max_x - min_x) / (max_y - min_y)
+
+        if ratio >= 1.5 and ratio <= 5: valid_components.append(component)
+
+
+    print("Found largest valid component: " + str(valid_components[0][0]))
+    return valid_components[0][0]
 
 def orderComponentsByLargest(components):
     return sorted(components.items(), key=lambda item: item[1], reverse=True)
@@ -377,10 +379,13 @@ def main():
 
     SHOW_DEBUG_FIGURES = True
 
-    # this is the default input image filename
-    # pass: 1, 3
-    # fail: 2
+    N_DILATIONS = 5
+    N_EROSIONS = 6
+
     input_filename = "numberplate1.png"
+
+    # this is the default input image filename
+    # D:E - 5:3(12356) 5:7(4) 5:5(12356) 5:6(13456)
 
     if command_line_arguments != []:
         input_filename = command_line_arguments[0]
@@ -400,16 +405,6 @@ def main():
     # each pixel array contains 8 bit integer values between 0 and 255 encoding the color values
     (image_width, image_height, px_array_r, px_array_g, px_array_b) = readRGBImageToSeparatePixelArrays(input_filename)
 
-    # setup the plots for intermediate results in a figure
-    fig1, axs1 = pyplot.subplots(2, 2)
-    axs1[0, 0].set_title('Input red channel of image')
-    axs1[0, 0].imshow(px_array_r, cmap='gray')
-    axs1[0, 1].set_title('Input green channel of image')
-    axs1[0, 1].imshow(px_array_g, cmap='gray')
-    axs1[1, 0].set_title('Input blue channel of image')
-    axs1[1, 0].imshow(px_array_b, cmap='gray')
-
-
     # STUDENT IMPLEMENTATION here
 
     # Convert to greyscale
@@ -417,7 +412,7 @@ def main():
     #px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
     px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
 
-    final_img = px_array
+    initial_img = px_array
 
     # Contrast stretching
     print("Applying contrast stretching")
@@ -432,49 +427,68 @@ def main():
 
     # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
     print("Computing and applying threshold")
-    final_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, 150, 0, 1)
-    #final_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
+    threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, 150, 0, 1)
+    #threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
 
-    # Morphological operations (repeat N_MORPH_OPS times for each)
-    N_MORPH_OPS = 5
+    # Morphological operations
 
-    for i in range(N_MORPH_OPS):
-        print("Computing dilation #" + str(i))
+    for i in range(N_DILATIONS):
+        print("Computing dilation #" + str(i+1))
         px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
 
-    for i in range(N_MORPH_OPS):
-        print("Computing erosion #" + str(i))
+    for i in range(N_EROSIONS):
+        print("Computing erosion #" + str(i+1))
         px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
+
+    morph_img = px_array
 
     # Connected component analysis
     print("Computing connected components")
-    [final_array, c] = [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
+    [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
     #final_img = isolateLargestComponent(px_array, components, image_width, image_height)
-    component = computeLargestValidComponent(components)
+    component = computeLargestValidComponent(px_array, components, image_width, image_height)
 
     # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
     print("Computing component bounding box")
     [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, component, image_width, image_height)
     #px_array = isolateLargestComponent(px_array, components, image_width, image_height)
 
-
-
-
     # Draw a bounding box as a rectangle into the input image
-    # axs1[1, 1].set_title('Final image of detection')
-    # axs1[1, 1].imshow(px_array, cmap='gray')
-    axs1[0, 1].set_title('Final pipeline image (px_array)')
-    axs1[0, 1].imshow(px_array, cmap='gray')
-    axs1[1, 1].set_title('Final image of detection')
-    axs1[1, 1].imshow(final_img, cmap='gray')
     rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
                      edgecolor='g', facecolor='none')
-    axs1[1, 1].add_patch(rect)
 
+    # setup the plots for intermediate results in a figure
+    DISPLAY_MODE = 1
 
+    if DISPLAY_MODE == 0:
+        fig1, axs1 = pyplot.subplots(2, 2)
+        axs1[0, 0].set_title('Input red channel of image')
+        axs1[0, 0].imshow(px_array_r, cmap='gray')
+        axs1[0, 1].set_title('Input green channel of image')
+        axs1[0, 1].imshow(px_array_g, cmap='gray')
+        axs1[1, 0].set_title('Input blue channel of image')
+        axs1[1, 0].imshow(px_array_b, cmap='gray')
+
+        axs1[1, 1].set_title('Final image of detection')
+        axs1[1, 1].imshow(px_array, cmap='gray')
+
+        axs1[1, 1].add_patch(rect)
+    elif DISPLAY_MODE == 1:
+        fig1, axs1 = pyplot.subplots(2, 2)
+        axs1[0,0].set_title('Initial')
+        axs1[0,0].imshow(initial_img, cmap='gray')
+        axs1[0,1].set_title('Threshold')
+        axs1[0,1].imshow(threshold_img, cmap='gray')
+        axs1[1,0].set_title('Morphological operations')
+        axs1[1,0].imshow(morph_img, cmap='gray')
+        axs1[1,1].set_title('Final image of detection')
+        axs1[1,1].imshow(initial_img, cmap='gray')
+
+        axs1[1,1].add_patch(rect)
+        
 
     # write the output image into output_filename, using the matplotlib savefig method
-    extent = axs1[1, 1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
+    extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
     pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
 
     if SHOW_DEBUG_FIGURES:
