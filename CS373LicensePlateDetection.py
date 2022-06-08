@@ -81,6 +81,21 @@ def convertToGreyscale(r, g, b, image_width, image_height):
     
     return r
 
+def getLowestMeanChannel(channels):
+    lowest_mean = 255
+    lowest_channel = []
+
+    for channel in channels:
+        channel_mean = computeArrayMean(channel)
+        if channel_mean < lowest_mean:
+            lowest_mean = channel_mean
+            lowest_channel = channel
+    
+    return lowest_channel
+
+def computeArrayMean(array):
+    return sum(sum(array, [])) / (len(array) * len(array[0]))
+
 
 def contrastStretch(px_array, image_width, image_height):
 
@@ -338,7 +353,9 @@ def main():
     SHOW_DEBUG_FIGURES = True
 
     # this is the default input image filename
-    input_filename = "numberplate1.png"
+    # pass: 1, 3
+    # fail: 2
+    input_filename = "numberplate3.png"
 
     if command_line_arguments != []:
         input_filename = command_line_arguments[0]
@@ -371,8 +388,10 @@ def main():
     # STUDENT IMPLEMENTATION here
 
     # Convert to greyscale
-    px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
-    greyscale_img = px_array
+    #px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
+    px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
+
+    final_img = px_array
 
      # Contrast stretching
     px_array = contrastStretch(px_array, image_width, image_height)
@@ -396,16 +415,9 @@ def main():
 
     # Connected component analysis
     [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
-    #px_array = isolateLargestComponent(px_array, components, image_width, image_height)
-    
+    #final_img = isolateLargestComponent(px_array, components, image_width, image_height)
 
     # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
-    # center_x = image_width / 2.0
-    # center_y = image_height / 2.0
-    # bbox_min_x = center_x - image_width / 4.0
-    # bbox_max_x = center_x + image_width / 4.0
-    # bbox_min_y = center_y - image_height / 4.0
-    # bbox_max_y = center_y + image_height / 4.0
     [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, computeLargestComponent(components), image_width, image_height)
 
 
@@ -414,7 +426,8 @@ def main():
 
     # Draw a bounding box as a rectangle into the input image
     axs1[1, 1].set_title('Final image of detection')
-    axs1[1, 1].imshow(greyscale_img, cmap='gray')
+    #axs1[1, 1].imshow(px_array, cmap='gray')
+    axs1[1, 1].imshow(final_img, cmap='gray')
     rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
                      edgecolor='g', facecolor='none')
     axs1[1, 1].add_patch(rect)
