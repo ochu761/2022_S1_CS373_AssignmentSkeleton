@@ -97,6 +97,25 @@ def getLowestMeanChannel(channels):
     
     return lowest_channel
 
+def getLargestSDChannel(channels):
+    largest_SD = 0
+    selected_channel = channels[0] # temp assignment
+
+    for channel in channels:
+        mean = computeArrayMean(channel)
+        variances = []
+        
+        for row in range(len(channel)):
+            for col in range(len(channel[0])):
+                variances.append(math.pow(mean - channel[row][col], 2))
+            
+        channel_SD = math.sqrt(sum(variances)/len(variances))
+        if channel_SD > largest_SD: 
+            largest_SD = channel_SD
+            selected_channel = channel
+    
+    return selected_channel
+
 def computeArrayMean(array):
     return sum(sum(array, [])) / (len(array) * len(array[0]))
 
@@ -382,7 +401,7 @@ def main():
     N_DILATIONS = 5
     N_EROSIONS = 6
 
-    input_filename = "numberplate1.png"
+    input_filename = "numberplate5.png"
 
     # this is the default input image filename
     # D:E - 5:3(12356) 5:7(4) 5:5(12356) 5:6(13456)
@@ -409,8 +428,9 @@ def main():
 
     # Convert to greyscale
     print("Converting image channels to single pixel array")
-    #px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
-    px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
+    px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
+    #px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
+    #px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
 
     initial_img = px_array
 
@@ -431,6 +451,10 @@ def main():
     #threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
 
     # Morphological operations
+    print("Computing pre-dilation")
+    px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
+    print("Computing pre-erosion")
+    px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     for i in range(N_DILATIONS):
         print("Computing dilation #" + str(i+1))
