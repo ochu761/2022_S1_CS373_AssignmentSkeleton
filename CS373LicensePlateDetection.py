@@ -465,7 +465,7 @@ def main():
     # Draw a bounding box as a rectangle into the input image
     print("Drawing bounding box")
     rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
-                     edgecolor='r', facecolor='none')
+                     edgecolor='g', facecolor='none')
 
     # setup the plots for intermediate results in a figure
     print("Displaying")
