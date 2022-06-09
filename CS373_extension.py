@@ -8,6 +8,12 @@ from matplotlib.patches import Rectangle
 # import our basic, light-weight png reader library
 import imageIO.png
 
+# EXTENSION: import for licence plate reader
+import cv2
+import numpy as np
+import imutils
+import easyocr
+
 # program-wide constants (student defined)
 LOWER_RATIO = 1.5
 UPPER_RATIO = 5
@@ -457,8 +463,9 @@ def main():
     # to determine whether further opening is necessary
     OPENING_THRESHOLD_FACTOR = 0.4
 
-    input_filename = "numberplate4.png"
+    SHARPENING_COEFF = 9 # for licence letter detection
 
+    input_filename = "numberplate5.png"
 
 
 
@@ -582,53 +589,90 @@ def main():
             print("No changes in component; finish repeated opening")
             break
 
-    # Draw a bounding box as a rectangle into the input image
-    print("Drawing bounding box")
-    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
-                     edgecolor='r', facecolor='none')
+    # convert input image to readable file using cv2
+    # TODO: use initial_img instead
 
-    # setup the plots for intermediate results in a figure
-    print("Displaying")
+    #cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
 
-    DISPLAY_MODE = 1
-    # 0 - original skeleton
-    # 1 - debugging for student
+    cv2_grey_img = np.float32(np.zeros([image_height, image_width]))
+    for y in range(image_height):
+        for x in range(image_width):
+            cv2_grey_img[y][x] = initial_img[y][x]
 
-    if DISPLAY_MODE == 0:
-        fig1, axs1 = pyplot.subplots(2, 2)
-        axs1[0, 0].set_title('Input red channel of image')
-        axs1[0, 0].imshow(px_array_r, cmap='gray')
-        axs1[0, 1].set_title('Input green channel of image')
-        axs1[0, 1].imshow(px_array_g, cmap='gray')
-        axs1[1, 0].set_title('Input blue channel of image')
-        axs1[1, 0].imshow(px_array_b, cmap='gray')
+    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+    
+    kernel = np.array([[0,-1,0], [-1,SHARPENING_COEFF,-1], [0,-1,0]])
+    cv2_grey_img = cv2.filter2D(cv2_grey_img, -1, kernel)
 
-        axs1[1, 1].set_title('Final image of detection')
-        axs1[1, 1].imshow(initial_img, cmap='gray')
+    cropped_image = cv2_grey_img[bbox_min_y:bbox_max_y + 1, bbox_min_x:bbox_max_x + 1]
 
-        axs1[1, 1].add_patch(rect)
+    fig1, axs1 = pyplot.subplots(2, 2)
+    axs1[0, 0].set_title('Full')
+    axs1[0, 0].imshow(cv2_grey_img, cmap='gray')
+    axs1[0, 1].set_title('Cropped')
+    axs1[0, 1].imshow(cropped_image, cmap="gray")
+    
+    reader = easyocr.Reader(['en'])
+    result = reader.readtext(cropped_image)
 
-    elif DISPLAY_MODE == 1:
-        fig1, axs1 = pyplot.subplots(2, 2) # may be tweaked according to debugging requirements
-        axs1[0,0].set_title('Threshold')
-        axs1[0,0].imshow(threshold_img, cmap='gray')
-        axs1[0,1].set_title('Morphological operations')
-        axs1[0,1].imshow(morph_img, cmap='gray')
-        axs1[1,0].set_title('Component labels')
-        axs1[1,0].imshow(component_img, cmap='gray')
-        axs1[1,1].set_title('Final image of detection')
-        axs1[1,1].imshow(initial_img, cmap='gray')
+    try:
+        text = str(result[0][-2])
+        print("Identified licence plate number: '{}' from file: '{}'".format(text, input_filename))
+    except:
+        print("Could not identify licence plate number from file: '{}'".format(input_filename))
+    
 
-        axs1[1,1].add_patch(rect)
+    pyplot.show()
+
+
+
+    # # Draw a bounding box as a rectangle into the input image
+    # print("Drawing bounding box")
+    # rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
+    #                  edgecolor='r', facecolor='none')
+
+    # # setup the plots for intermediate results in a figure
+    # print("Displaying")
+
+    # DISPLAY_MODE = 1
+    # # 0 - original skeleton
+    # # 1 - debugging for student
+
+    # if DISPLAY_MODE == 0:
+    #     fig1, axs1 = pyplot.subplots(2, 2)
+    #     axs1[0, 0].set_title('Input red channel of image')
+    #     axs1[0, 0].imshow(px_array_r, cmap='gray')
+    #     axs1[0, 1].set_title('Input green channel of image')
+    #     axs1[0, 1].imshow(px_array_g, cmap='gray')
+    #     axs1[1, 0].set_title('Input blue channel of image')
+    #     axs1[1, 0].imshow(px_array_b, cmap='gray')
+
+    #     axs1[1, 1].set_title('Final image of detection')
+    #     axs1[1, 1].imshow(initial_img, cmap='gray')
+
+    #     axs1[1, 1].add_patch(rect)
+
+    # elif DISPLAY_MODE == 1:
+    #     fig1, axs1 = pyplot.subplots(2, 2) # may be tweaked according to debugging requirements
+    #     axs1[0,0].set_title('Threshold')
+    #     axs1[0,0].imshow(threshold_img, cmap='gray')
+    #     axs1[0,1].set_title('Morphological operations')
+    #     axs1[0,1].imshow(morph_img, cmap='gray')
+    #     axs1[1,0].set_title('Component labels')
+    #     axs1[1,0].imshow(component_img, cmap='gray')
+    #     axs1[1,1].set_title('Final image of detection')
+    #     axs1[1,1].imshow(initial_img, cmap='gray')
+
+    #     axs1[1,1].add_patch(rect)
         
 
-    # write the output image into output_filename, using the matplotlib savefig method
-    extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
-    pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
+    # # write the output image into output_filename, using the matplotlib savefig method
+    # extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
+    # pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
 
-    if SHOW_DEBUG_FIGURES:
-        # plot the current figure
-        pyplot.show()
+    # if SHOW_DEBUG_FIGURES:
+    #     # plot the current figure
+    #     pyplot.show()
 
 
 if __name__ == "__main__":
