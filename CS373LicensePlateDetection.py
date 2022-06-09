@@ -440,11 +440,10 @@ def main():
     N_EROSIONS = 5
     RECOMMENDED_THRESHOLD = 150
 
-    input_filename = "numberplate4.png"
+    input_filename = "numberplate3.png"
 
     # this is the default input image filename
-    # D:E - 5:3(12356) 5:7(4) 5:5(12356) 5:6(13456)
-    # D:E @ 150 - 5:5(12356)
+    # D:E @ 150 - 5:5(123456)
 
     #TODO
     # - Consider trimming down identified component to edges by detecting min/max x and y with 89% straight edge boundary
@@ -471,9 +470,9 @@ def main():
 
     # Convert to greyscale
     print("Converting image channels to single pixel array")
-    px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
+    #px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
     #px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
-    #px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
+    px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
 
     initial_img = px_array
 
@@ -509,19 +508,36 @@ def main():
 
     morph_img = px_array
 
-    # Connected component analysis
-    print("Computing connected components")
-    [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
+    # problem: images where the licence plate is small are more susceptible to "strings"
+    bbox_min_x = bbox_max_x = bbox_min_y = bbox_max_y = 0
+    prev_area = -1
+    area = 0
 
-    component_img = px_array
-    component = computeLargestValidComponent(px_array, components, image_width, image_height)
+    while prev_area != area:
+        # Connected component analysis
+        print("Computing connected components")
+        [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
 
-    # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
-    print("Computing component bounding box")
-    [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, component, image_width, image_height)
+        component_img = px_array
+        component = computeLargestValidComponent(px_array, components, image_width, image_height)
+
+        # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
+        print("Computing component bounding box")
+        [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, component, image_width, image_height)
+
+        prev_area = area
+
+        # if component is small, consider opening to reduce undue influence by small SE
+
+        if bbox_max_x - bbox_min_x < 0.4 * image_width or bbox_max_x - bbox_min_x < 0.4 * image_height:    
+            print("Component is small: computing opening (erosion followed by dilation)")
+            px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
+            px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
+
+            area = (bbox_max_x - bbox_min_x) * (bbox_max_y - bbox_min_y)
 
     # Draw a bounding box as a rectangle into the input image
-    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=2,
+    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
                      edgecolor='r', facecolor='none')
 
     # setup the plots for intermediate results in a figure
