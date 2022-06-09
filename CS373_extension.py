@@ -463,9 +463,9 @@ def main():
     # to determine whether further opening is necessary
     OPENING_THRESHOLD_FACTOR = 0.4
 
-    SHARPENING_COEFF = 9 # for licence letter detection
+    SHARPENING_COEFF = 5 # for licence letter detection
 
-    input_filename = "numberplate5.png"
+    input_filename = "numberplate1.png"
 
 
 
@@ -589,15 +589,19 @@ def main():
             print("No changes in component; finish repeated opening")
             break
 
+
+
+    # EXTENSION: licence plate number detection
+
     # convert input image to readable file using cv2
+
     # TODO: use initial_img instead
+    # cv2_grey_img = np.float32(np.zeros([image_height, image_width, 3]))
+    # for y in range(image_height):
+    #     for x in range(image_width):
+    #         cv2_grey_img[y][x] = initial_img[y][x]
 
-    #cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
-
-    cv2_grey_img = np.float32(np.zeros([image_height, image_width]))
-    for y in range(image_height):
-        for x in range(image_width):
-            cv2_grey_img[y][x] = initial_img[y][x]
+    cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
 
     # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
     
@@ -605,74 +609,74 @@ def main():
     cv2_grey_img = cv2.filter2D(cv2_grey_img, -1, kernel)
 
     cropped_image = cv2_grey_img[bbox_min_y:bbox_max_y + 1, bbox_min_x:bbox_max_x + 1]
-
-    fig1, axs1 = pyplot.subplots(2, 2)
-    axs1[0, 0].set_title('Full')
-    axs1[0, 0].imshow(cv2_grey_img, cmap='gray')
-    axs1[0, 1].set_title('Cropped')
-    axs1[0, 1].imshow(cropped_image, cmap="gray")
     
     reader = easyocr.Reader(['en'])
     result = reader.readtext(cropped_image)
+    print(result)
+    
+    # TODO: return larger text (see img 3)
 
     try:
-        text = str(result[0][-2])
-        print("Identified licence plate number: '{}' from file: '{}'".format(text, input_filename))
+        plate_number = str(result[0][-2])
+        print("Identified licence plate number: '{}' from file: '{}'".format(plate_number, input_filename))
     except:
+        plate_number = ""
         print("Could not identify licence plate number from file: '{}'".format(input_filename))
-    
-
-    pyplot.show()
 
 
 
-    # # Draw a bounding box as a rectangle into the input image
-    # print("Drawing bounding box")
-    # rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
-    #                  edgecolor='r', facecolor='none')
+    # Draw a bounding box as a rectangle into the input image
+    print("Drawing bounding box")
+    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
+                     edgecolor='r', facecolor='none')
 
-    # # setup the plots for intermediate results in a figure
-    # print("Displaying")
+    # setup the plots for intermediate results in a figure
+    print("Displaying")
 
-    # DISPLAY_MODE = 1
-    # # 0 - original skeleton
-    # # 1 - debugging for student
+    DISPLAY_MODE = 1
+    # 0 - original skeleton
+    # 1 - debugging for student
 
-    # if DISPLAY_MODE == 0:
-    #     fig1, axs1 = pyplot.subplots(2, 2)
-    #     axs1[0, 0].set_title('Input red channel of image')
-    #     axs1[0, 0].imshow(px_array_r, cmap='gray')
-    #     axs1[0, 1].set_title('Input green channel of image')
-    #     axs1[0, 1].imshow(px_array_g, cmap='gray')
-    #     axs1[1, 0].set_title('Input blue channel of image')
-    #     axs1[1, 0].imshow(px_array_b, cmap='gray')
+    if DISPLAY_MODE == 0:
+        fig1, axs1 = pyplot.subplots(2, 2)
+        axs1[0, 0].set_title('Input red channel of image')
+        axs1[0, 0].imshow(px_array_r, cmap='gray')
+        axs1[0, 1].set_title('Input green channel of image')
+        axs1[0, 1].imshow(px_array_g, cmap='gray')
+        axs1[1, 0].set_title('Input blue channel of image')
+        axs1[1, 0].imshow(px_array_b, cmap='gray')
 
-    #     axs1[1, 1].set_title('Final image of detection')
-    #     axs1[1, 1].imshow(initial_img, cmap='gray')
+        axs1[1, 1].set_title('Final image of detection')
+        axs1[1, 1].imshow(initial_img, cmap='gray')
 
-    #     axs1[1, 1].add_patch(rect)
+        axs1[1, 1].add_patch(rect)
 
-    # elif DISPLAY_MODE == 1:
-    #     fig1, axs1 = pyplot.subplots(2, 2) # may be tweaked according to debugging requirements
-    #     axs1[0,0].set_title('Threshold')
-    #     axs1[0,0].imshow(threshold_img, cmap='gray')
-    #     axs1[0,1].set_title('Morphological operations')
-    #     axs1[0,1].imshow(morph_img, cmap='gray')
-    #     axs1[1,0].set_title('Component labels')
-    #     axs1[1,0].imshow(component_img, cmap='gray')
-    #     axs1[1,1].set_title('Final image of detection')
-    #     axs1[1,1].imshow(initial_img, cmap='gray')
+    elif DISPLAY_MODE == 1:
+        fig1, axs1 = pyplot.subplots(3, 2) # may be tweaked according to debugging requirements
+        axs1[0,0].set_title('Threshold')
+        axs1[0,0].imshow(threshold_img, cmap='gray')
+        axs1[0,1].set_title('Morphological operations')
+        axs1[0,1].imshow(morph_img, cmap='gray')
+        axs1[1,0].set_title('Component labels')
+        axs1[1,0].imshow(component_img, cmap='gray')
+        axs1[1,1].set_title('Final image of detection')
+        axs1[1,1].imshow(initial_img, cmap='gray')
 
-    #     axs1[1,1].add_patch(rect)
+        axs1[2, 0].set_title('cv2 Input')
+        axs1[2, 0].imshow(cv2_grey_img, cmap='gray')
+        axs1[2, 1].set_title('Cropped plate: {}'.format(plate_number))
+        axs1[2, 1].imshow(cropped_image, cmap="gray")
+
+        axs1[1,1].add_patch(rect)
         
 
-    # # write the output image into output_filename, using the matplotlib savefig method
-    # extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
-    # pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
+    # write the output image into output_filename, using the matplotlib savefig method
+    extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
+    pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
 
-    # if SHOW_DEBUG_FIGURES:
-    #     # plot the current figure
-    #     pyplot.show()
+    if SHOW_DEBUG_FIGURES:
+        # plot the current figure
+        pyplot.show()
 
 
 if __name__ == "__main__":
