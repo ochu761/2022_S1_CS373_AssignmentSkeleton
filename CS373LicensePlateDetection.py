@@ -416,7 +416,7 @@ def main():
 
     # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
     print("Computing and applying threshold")
-    threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
+    px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
 
     # Morphological operations
     print("Computing opening")
@@ -431,8 +431,6 @@ def main():
         print("Computing erosion " + str(i+1) + "/" + str(N_EROSIONS))
         px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
-    morph_img = px_array
-
     # problem: images where the licence plate is small are more susceptible to "strings" which increase their bounding box
     bbox_min_x = bbox_max_x = bbox_min_y = bbox_max_y = 0
     prev_area = -1
@@ -443,7 +441,6 @@ def main():
         print("Computing connected components")
         [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
 
-        component_img = px_array
         component = computeLargestValidComponent(px_array, components, image_width, image_height)
 
         print("Computing component bounding box")
