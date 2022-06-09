@@ -8,6 +8,11 @@ from matplotlib.patches import Rectangle
 # import our basic, light-weight png reader library
 import imageIO.png
 
+# program-wide constants (student defined)
+LOWER_RATIO = 1.5
+UPPER_RATIO = 5
+MIN_SIZE_PERCENTAGE = 0.1 # any licence plate should not have dimensions less than 10% of the image dimensions
+
 # this function reads an RGB color png file and returns width, height, as well as pixel arrays for r,g,b
 def readRGBImageToSeparatePixelArrays(input_filename):
 
@@ -15,7 +20,7 @@ def readRGBImageToSeparatePixelArrays(input_filename):
     # png reader gives us width and height, as well as RGB data in image_rows (a list of rows of RGB triplets)
     (image_width, image_height, rgb_image_rows, rgb_image_info) = image_reader.read()
 
-    print("read image width={}, height={}".format(image_width, image_height))
+    print("\nReading image '{}' with width={}, height={}".format(input_filename, image_width, image_height))
 
     # our pixel arrays are lists of lists, where each inner list stores one row of greyscale pixels
     pixel_array_r = []
@@ -316,6 +321,9 @@ def isInBounds(x,y,width,height):
     
     return False
 
+
+
+
 def computeComponentBoundingBox(px_array, component, image_width, image_height):
     min_x = image_width
     min_y = image_height
@@ -332,8 +340,11 @@ def computeComponentBoundingBox(px_array, component, image_width, image_height):
 
     return [min_x, max_x, min_y, max_y]
 
+
+
 def computeLargestValidComponent(px_array, components, image_width, image_height):
     components = orderComponentsByLargest(components)
+    print("... from {} components".format(len(components)))
     dimension_shortlist = []
     alignment_shortlist = []
 
@@ -351,7 +362,7 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
         else: 
             ratio = width / height
 
-        if ratio >= 1.5 and ratio <= 5: isValidRatio = True
+        if ratio >= LOWER_RATIO and ratio <= UPPER_RATIO: isValidRatio = True
         if width > 0.1 * image_width or height > 0.1 * image_height: isValidSize = True
 
         if isValidRatio and isValidSize: dimension_shortlist.append(component)
@@ -360,8 +371,10 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
     for component in dimension_shortlist:
         component_val = component[0]
         [min_x, max_x, min_y, max_y] = computeComponentBoundingBox(px_array, component_val, image_width, image_height)
+
         longest_row_count = 0
 
+        # for each row, count the largest number of component pixels in any row
         for y in range(min_y, max_y + 1):
             row_count = 0
 
@@ -371,19 +384,19 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
             if row_count > longest_row_count: 
                 longest_row_count = row_count
 
-        # calculate horizontal alignment ratio and append to shortlist
-        print(longest_row_count)
-        print((component_val, longest_row_count/(max_x - min_x)))
+        # calculate horizontal alignment degree and append to shortlist
+        print("- Label: {}, Alignment degree: {}".format(component_val, longest_row_count/(max_x - min_x)))
         alignment_shortlist.append((component_val, longest_row_count/(max_x - min_x)))
 
-    # sort by longest horizontal alignment ratio
+    # sort by longest horizontal alignment degree
     alignment_shortlist.sort(key=takeSecond, reverse=True)
 
-    # return component value of component with greatest horizontal alignment ratio
+    # return component value of component with greatest horizontal alignment degree
     if (len(alignment_shortlist) == 0):
+        print("No valid components found; defaulting to label 0 (background)")
         return 0 # no component found
 
-    print("Found largest valid component: " + str(alignment_shortlist[0][0]))
+    print("Found largest valid component: " + str(alignment_shortlist[0][0]) + "\n")
     return alignment_shortlist[0][0]
 
 def orderComponentsByLargest(components):
@@ -393,6 +406,9 @@ def takeSecond(element):
     return element[1]
 
    
+
+
+
 class Pixel:
     def __init__(self, x, y, val):
         self.x = x
@@ -431,21 +447,26 @@ class Queue:
 # we won't detect arbitrary or difficult to detect license plates!
 def main():
 
+    # ========= Student defined constants
+
+    RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
+    N_DILATIONS = 5
+    N_EROSIONS = 5
+
+    # how small the component dimensions compared to the image dimensions are
+    # to determine whether further opening is necessary
+    OPENING_THRESHOLD_FACTOR = 0.4
+
+    input_filename = "numberplate1.png"
+
+    # D:E @ 150 - 5:5(123456)
+
+
+
+
     command_line_arguments = sys.argv[1:]
 
     SHOW_DEBUG_FIGURES = True
-
-    N_DILATIONS = 5
-    N_EROSIONS = 5
-    RECOMMENDED_THRESHOLD = 150
-
-    input_filename = "numberplate4.png"
-
-    # this is the default input image filename
-    # D:E @ 150 - 5:5(123456)
-
-    #TODO
-    # - Consider trimming down identified component to edges by detecting min/max x and y with 89% straight edge boundary
 
     if command_line_arguments != []:
         input_filename = command_line_arguments[0]
@@ -469,9 +490,9 @@ def main():
 
     # Convert to greyscale
     print("Converting image channels to single pixel array")
-    #px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
+    px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
     #px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
-    px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
+    #px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
 
     initial_img = px_array
 
@@ -492,9 +513,8 @@ def main():
     #threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
 
     # Morphological operations
-    print("Computing pre-dilation")
+    print("Computing opening")
     px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
-    print("Computing pre-erosion")
     px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     for i in range(N_DILATIONS):
@@ -507,12 +527,12 @@ def main():
 
     morph_img = px_array
 
-    # problem: images where the licence plate is small are more susceptible to "strings"
+    # problem: images where the licence plate is small are more susceptible to "strings" which increase their bounding box
     bbox_min_x = bbox_max_x = bbox_min_y = bbox_max_y = 0
     prev_area = -1
     area = 0
 
-    while prev_area != area:
+    while True:
         # Connected component analysis
         print("Computing connected components")
         [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
@@ -527,19 +547,29 @@ def main():
 
         # if component is small, perform opening to reduce undue influence by small SE
 
-        if bbox_max_x - bbox_min_x < 0.4 * image_width or bbox_max_x - bbox_min_x < 0.4 * image_height:    
+        if (bbox_max_x - bbox_min_x < OPENING_THRESHOLD_FACTOR * image_width):
+            # further opening is needed; reassign area
+            area = (bbox_max_x - bbox_min_x) * (bbox_max_y - bbox_min_y)
+            
             print("Component is small: computing opening (erosion followed by dilation)")
             px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
             px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
-
-            area = (bbox_max_x - bbox_min_x) * (bbox_max_y - bbox_min_y)
+        
+        if prev_area == area:
+            print("No changes in component; finish repeated opening")
+            break
 
     # Draw a bounding box as a rectangle into the input image
+    print("Drawing bounding box")
     rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
                      edgecolor='r', facecolor='none')
 
     # setup the plots for intermediate results in a figure
-    DISPLAY_MODE = 1
+    print("Displaying")
+
+    DISPLAY_MODE = 0
+    # 0 - original skeleton
+    # 1 - debugging for student
 
     if DISPLAY_MODE == 0:
         fig1, axs1 = pyplot.subplots(2, 2)
@@ -551,11 +581,12 @@ def main():
         axs1[1, 0].imshow(px_array_b, cmap='gray')
 
         axs1[1, 1].set_title('Final image of detection')
-        axs1[1, 1].imshow(px_array, cmap='gray')
+        axs1[1, 1].imshow(initial_img, cmap='gray')
 
         axs1[1, 1].add_patch(rect)
+
     elif DISPLAY_MODE == 1:
-        fig1, axs1 = pyplot.subplots(2, 2)
+        fig1, axs1 = pyplot.subplots(2, 2) # may be tweaked according to debugging requirements
         axs1[0,0].set_title('Threshold')
         axs1[0,0].imshow(threshold_img, cmap='gray')
         axs1[0,1].set_title('Morphological operations')
