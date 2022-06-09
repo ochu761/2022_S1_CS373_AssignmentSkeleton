@@ -457,9 +457,7 @@ def main():
     # to determine whether further opening is necessary
     OPENING_THRESHOLD_FACTOR = 0.4
 
-    input_filename = "numberplate1.png"
-
-    # D:E @ 150 - 5:5(123456)
+    input_filename = "numberplate4.png"
 
 
 
@@ -488,13 +486,27 @@ def main():
 
     # STUDENT IMPLEMENTATION here
 
-    # Convert to greyscale
+
+
+    # Convert to single pixel array
     print("Converting image channels to single pixel array")
-    px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
-    #px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
-    #px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
+
+    CONVERSION_METHOD = 2
+    # 0 - greyscale
+    # 1 - channel with lowest mean 
+    # 2 - channel with largest standard deviation
+
+    if CONVERSION_METHOD == 1:
+        px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
+    elif CONVERSION_METHOD == 2:
+        px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
+    else:
+        px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
 
     initial_img = px_array
+
+
+
 
     # Contrast stretching
     print("Applying contrast stretching")
@@ -507,10 +519,21 @@ def main():
     print("Applying contrast stretching")
     px_array = contrastStretch(px_array, image_width, image_height)
 
-    # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
+
+
+    # Thresholding for segmentation (to binary with min=0 and max=1)
     print("Computing and applying threshold")
-    threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
-    #threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
+
+    THRESHOLDING_METHOD = 0
+    # 0 - simple thresholding
+    # 1 - adaptive thresholding
+
+    if THRESHOLDING_METHOD == 1: 
+        threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
+    else: 
+        threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
+
+
 
     # Morphological operations
     print("Computing opening")
@@ -567,7 +590,7 @@ def main():
     # setup the plots for intermediate results in a figure
     print("Displaying")
 
-    DISPLAY_MODE = 0
+    DISPLAY_MODE = 1
     # 0 - original skeleton
     # 1 - debugging for student
 
