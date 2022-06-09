@@ -181,7 +181,7 @@ def computeStandardDeviationImage5x5(px_array, image_width, image_height):
 
 
 
-def simpleThresholdToBinary(px_array, image_width, image_height, threshold=150, min=0, max=255):
+def simpleThresholdToBinary(px_array, image_width, image_height, threshold, min=0, max=255):
     for y in range(image_height):
         for x in range(image_width):
             # reuse px_array as output array as will not be impacted by subsequent iterations
@@ -335,25 +335,63 @@ def computeComponentBoundingBox(px_array, component, image_width, image_height):
 
 def computeLargestValidComponent(px_array, components, image_width, image_height):
     components = orderComponentsByLargest(components)
-    valid_components = []
+    dimension_shortlist = []
+    alignment_shortlist = []
 
+    # shortlist by dimensions
     for component in components:
         [min_x, max_x, min_y, max_y] = computeComponentBoundingBox(px_array, component[0], image_width, image_height)
 
-        if max_y - min_y == 0: 
+        width = max_x - min_x
+        height = max_y - min_y
+
+        isValidRatio = isValidSize = False
+        
+        if height == 0: 
             ratio = 0
         else: 
-            ratio = (max_x - min_x) / (max_y - min_y)
+            ratio = width / height
 
-        if ratio >= 1.5 and ratio <= 5: valid_components.append(component)
+        if ratio >= 1.5 and ratio <= 5: isValidRatio = True
+        if width > 0.1 * image_width or height > 0.1 * image_height: isValidSize = True
 
+        if isValidRatio and isValidSize: dimension_shortlist.append(component)
 
-    print("Found largest valid component: " + str(valid_components[0][0]))
-    return valid_components[0][0]
+    # sort by horizontal alignment
+    for component in dimension_shortlist:
+        component_val = component[0]
+        [min_x, max_x, min_y, max_y] = computeComponentBoundingBox(px_array, component_val, image_width, image_height)
+        longest_row_count = 0
+
+        for y in range(min_y, max_y + 1):
+            row_count = 0
+
+            for x in range(min_x, max_x + 1):
+                if px_array[y][x] == component_val: row_count += 1
+
+            if row_count > longest_row_count: 
+                longest_row_count = row_count
+
+        # calculate horizontal alignment ratio and append to shortlist
+        print(longest_row_count)
+        print((component_val, longest_row_count/(max_x - min_x)))
+        alignment_shortlist.append((component_val, longest_row_count/(max_x - min_x)))
+
+    # sort by longest horizontal alignment ratio
+    alignment_shortlist.sort(key=takeSecond, reverse=True)
+
+    # return component value of component with greatest horizontal alignment ratio
+    if (len(alignment_shortlist) == 0):
+        return 0 # no component found
+
+    print("Found largest valid component: " + str(alignment_shortlist[0][0]))
+    return alignment_shortlist[0][0]
 
 def orderComponentsByLargest(components):
     return sorted(components.items(), key=lambda item: item[1], reverse=True)
 
+def takeSecond(element):
+    return element[1]
 
    
 class Pixel:
@@ -399,12 +437,17 @@ def main():
     SHOW_DEBUG_FIGURES = True
 
     N_DILATIONS = 5
-    N_EROSIONS = 6
+    N_EROSIONS = 5
+    RECOMMENDED_THRESHOLD = 150
 
-    input_filename = "numberplate5.png"
+    input_filename = "numberplate4.png"
 
     # this is the default input image filename
     # D:E - 5:3(12356) 5:7(4) 5:5(12356) 5:6(13456)
+    # D:E @ 150 - 5:5(12356)
+
+    #TODO
+    # - Consider trimming down identified component to edges by detecting min/max x and y with 89% straight edge boundary
 
     if command_line_arguments != []:
         input_filename = command_line_arguments[0]
@@ -447,7 +490,7 @@ def main():
 
     # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
     print("Computing and applying threshold")
-    threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, 150, 0, 1)
+    threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
     #threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
 
     # Morphological operations
@@ -457,11 +500,11 @@ def main():
     px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     for i in range(N_DILATIONS):
-        print("Computing dilation #" + str(i+1))
+        print("Computing dilation " + str(i+1) + "/" + str(N_DILATIONS))
         px_array = computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     for i in range(N_EROSIONS):
-        print("Computing erosion #" + str(i+1))
+        print("Computing erosion " + str(i+1) + "/" + str(N_EROSIONS))
         px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
     morph_img = px_array
@@ -469,17 +512,17 @@ def main():
     # Connected component analysis
     print("Computing connected components")
     [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
-    #final_img = isolateLargestComponent(px_array, components, image_width, image_height)
+
+    component_img = px_array
     component = computeLargestValidComponent(px_array, components, image_width, image_height)
 
     # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
     print("Computing component bounding box")
     [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, component, image_width, image_height)
-    #px_array = isolateLargestComponent(px_array, components, image_width, image_height)
 
     # Draw a bounding box as a rectangle into the input image
-    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
-                     edgecolor='g', facecolor='none')
+    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=2,
+                     edgecolor='r', facecolor='none')
 
     # setup the plots for intermediate results in a figure
     DISPLAY_MODE = 1
@@ -499,12 +542,12 @@ def main():
         axs1[1, 1].add_patch(rect)
     elif DISPLAY_MODE == 1:
         fig1, axs1 = pyplot.subplots(2, 2)
-        axs1[0,0].set_title('Initial')
-        axs1[0,0].imshow(initial_img, cmap='gray')
-        axs1[0,1].set_title('Threshold')
-        axs1[0,1].imshow(threshold_img, cmap='gray')
-        axs1[1,0].set_title('Morphological operations')
-        axs1[1,0].imshow(morph_img, cmap='gray')
+        axs1[0,0].set_title('Threshold')
+        axs1[0,0].imshow(threshold_img, cmap='gray')
+        axs1[0,1].set_title('Morphological operations')
+        axs1[0,1].imshow(morph_img, cmap='gray')
+        axs1[1,0].set_title('Component labels')
+        axs1[1,0].imshow(component_img, cmap='gray')
         axs1[1,1].set_title('Final image of detection')
         axs1[1,1].imshow(initial_img, cmap='gray')
 
