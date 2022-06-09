@@ -62,26 +62,6 @@ def createInitializedGreyscalePixelArray(image_width, image_height, initValue = 
 
 # ======== STUDENT IMPLEMENTATION
 
-def computeHistogram(pixel_array, image_width, image_height, nr_bins):
-
-    histogram = [0 for i in range(nr_bins)]
-    bin_sum = [0 for i in range(nr_bins)]
-
-    bin_width = math.ceil(255/nr_bins)
-    
-    for i in range(image_height):
-        for j in range(image_width):
-            # if max = 255, and nr_bins = 8
-            # 255/8 = 31.875
-            # if p = 255, 255/31.875 = 8
-            
-            bin_index = math.floor(pixel_array[i][j]/bin_width)
-            
-            histogram[bin_index] += 1
-            bin_sum[bin_index] += pixel_array[i][j]
-
-    return [histogram, bin_sum]
-
 def convertToGreyscale(r, g, b, image_width, image_height):
     for y in range(image_height):
         for x in range(image_width):
@@ -89,41 +69,6 @@ def convertToGreyscale(r, g, b, image_width, image_height):
             r[y][x] = round(0.299*r[y][x] + 0.587*g[y][x] + 0.114*g[y][x])
     
     return r
-
-def getLowestMeanChannel(channels):
-    lowest_mean = 255
-    lowest_channel = []
-
-    for channel in channels:
-        channel_mean = computeArrayMean(channel)
-        if channel_mean < lowest_mean:
-            lowest_mean = channel_mean
-            lowest_channel = channel
-    
-    return lowest_channel
-
-def getLargestSDChannel(channels):
-    largest_SD = 0
-    selected_channel = channels[0] # temp assignment
-
-    for channel in channels:
-        mean = computeArrayMean(channel)
-        variances = []
-        
-        for row in range(len(channel)):
-            for col in range(len(channel[0])):
-                variances.append(math.pow(mean - channel[row][col], 2))
-            
-        channel_SD = math.sqrt(sum(variances)/len(variances))
-        if channel_SD > largest_SD: 
-            largest_SD = channel_SD
-            selected_channel = channel
-    
-    return selected_channel
-
-def computeArrayMean(array):
-    return sum(sum(array, [])) / (len(array) * len(array[0]))
-
 
 def contrastStretch(px_array, image_width, image_height):
 
@@ -194,38 +139,6 @@ def simpleThresholdToBinary(px_array, image_width, image_height, threshold, min=
             else: px_array[y][x] = max
     
     return px_array
-
-def adaptiveThresholdToBinary(px_array, image_width, image_height, min=0, max=255):
-    nr_bins = 32
-    [histogram, bin_sum] = computeHistogram(px_array, image_width, image_height, nr_bins)
-    bin_width = math.ceil(255/nr_bins)
-
-    threshold = sum(bin_sum) / sum(histogram)
-    print(threshold)
-
-    while True:
-        threshold_index = math.floor(threshold/bin_width)
-
-        lower_count = histogram[:threshold_index]
-        lower_sum = bin_sum[:threshold_index]
-        upper_count = histogram[threshold_index+1:]
-        upper_sum = bin_sum[threshold_index+1:]
-
-        lower_mean = sum(lower_sum) / sum(lower_count)
-        upper_mean = sum(upper_sum) / sum(upper_count)
-
-        new_threshold = 0.5 * (lower_mean + upper_mean)
-        print(new_threshold)
-
-        if new_threshold == threshold:
-            threshold = new_threshold
-            break
-
-        threshold = new_threshold
-
-    return simpleThresholdToBinary(px_array, image_width, image_height, threshold, min, max)
-
-
 
 
 def computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height):
@@ -459,10 +372,6 @@ def main():
 
     input_filename = "numberplate1.png"
 
-    # D:E @ 150 - 5:5(123456)
-
-
-
 
     command_line_arguments = sys.argv[1:]
 
@@ -491,8 +400,6 @@ def main():
     # Convert to greyscale
     print("Converting image channels to single pixel array")
     px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
-    #px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
-    #px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
 
     initial_img = px_array
 
@@ -510,7 +417,6 @@ def main():
     # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
     print("Computing and applying threshold")
     threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
-    #threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
 
     # Morphological operations
     print("Computing opening")
@@ -567,36 +473,18 @@ def main():
     # setup the plots for intermediate results in a figure
     print("Displaying")
 
-    DISPLAY_MODE = 0
-    # 0 - original skeleton
-    # 1 - debugging for student
+    fig1, axs1 = pyplot.subplots(2, 2)
+    axs1[0, 0].set_title('Input red channel of image')
+    axs1[0, 0].imshow(px_array_r, cmap='gray')
+    axs1[0, 1].set_title('Input green channel of image')
+    axs1[0, 1].imshow(px_array_g, cmap='gray')
+    axs1[1, 0].set_title('Input blue channel of image')
+    axs1[1, 0].imshow(px_array_b, cmap='gray')
 
-    if DISPLAY_MODE == 0:
-        fig1, axs1 = pyplot.subplots(2, 2)
-        axs1[0, 0].set_title('Input red channel of image')
-        axs1[0, 0].imshow(px_array_r, cmap='gray')
-        axs1[0, 1].set_title('Input green channel of image')
-        axs1[0, 1].imshow(px_array_g, cmap='gray')
-        axs1[1, 0].set_title('Input blue channel of image')
-        axs1[1, 0].imshow(px_array_b, cmap='gray')
+    axs1[1, 1].set_title('Final image of detection')
+    axs1[1, 1].imshow(initial_img, cmap='gray')
 
-        axs1[1, 1].set_title('Final image of detection')
-        axs1[1, 1].imshow(initial_img, cmap='gray')
-
-        axs1[1, 1].add_patch(rect)
-
-    elif DISPLAY_MODE == 1:
-        fig1, axs1 = pyplot.subplots(2, 2) # may be tweaked according to debugging requirements
-        axs1[0,0].set_title('Threshold')
-        axs1[0,0].imshow(threshold_img, cmap='gray')
-        axs1[0,1].set_title('Morphological operations')
-        axs1[0,1].imshow(morph_img, cmap='gray')
-        axs1[1,0].set_title('Component labels')
-        axs1[1,0].imshow(component_img, cmap='gray')
-        axs1[1,1].set_title('Final image of detection')
-        axs1[1,1].imshow(initial_img, cmap='gray')
-
-        axs1[1,1].add_patch(rect)
+    axs1[1, 1].add_patch(rect)
         
 
     # write the output image into output_filename, using the matplotlib savefig method
