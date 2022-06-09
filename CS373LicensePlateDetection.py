@@ -318,9 +318,8 @@ def isInBounds(x,y,width,height):
 
 def computeComponentBoundingBox(px_array, component, image_width, image_height):
     min_x = image_width
-    max_x = 0
     min_y = image_height
-    max_y = 0
+    max_x = max_y = 0
 
     for y in range(image_height):
         for x in range(image_width):
@@ -440,7 +439,7 @@ def main():
     N_EROSIONS = 5
     RECOMMENDED_THRESHOLD = 150
 
-    input_filename = "numberplate3.png"
+    input_filename = "numberplate4.png"
 
     # this is the default input image filename
     # D:E @ 150 - 5:5(123456)
@@ -521,13 +520,12 @@ def main():
         component_img = px_array
         component = computeLargestValidComponent(px_array, components, image_width, image_height)
 
-        # compute a dummy bounding box centered in the middle of the input image, and with as size of half of width and height
         print("Computing component bounding box")
         [bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y] = computeComponentBoundingBox(px_array, component, image_width, image_height)
 
         prev_area = area
 
-        # if component is small, consider opening to reduce undue influence by small SE
+        # if component is small, perform opening to reduce undue influence by small SE
 
         if bbox_max_x - bbox_min_x < 0.4 * image_width or bbox_max_x - bbox_min_x < 0.4 * image_height:    
             print("Component is small: computing opening (erosion followed by dilation)")
