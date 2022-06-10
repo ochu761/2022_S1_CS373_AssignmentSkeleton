@@ -368,7 +368,7 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
             ratio = width / height
 
         if ratio >= LOWER_RATIO and ratio <= UPPER_RATIO: isValidRatio = True
-        if width > 0.1 * image_width or height > 0.1 * image_height: isValidSize = True
+        if width > MIN_SIZE_PERCENTAGE * image_width or height > MIN_SIZE_PERCENTAGE * image_height: isValidSize = True
 
         if isValidRatio and isValidSize: dimension_shortlist.append(component)
 
