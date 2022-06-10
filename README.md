@@ -6,6 +6,7 @@ This assignment will require you to use what we have studied in the image proces
 
 You will receive 10 marks for solving the license plate detection problem, and there will be an additional component for 5 marks, where you will extend upon the license plate detection, and write a short reflective report about your extension.
 
+
 # README Comments from Ou-An Chuang (ochu761)
 
 See requirements.txt for required libraries which can be installed (if not already) with the following:
@@ -20,8 +21,21 @@ Note: Requires older version of OpenCV; newer version may cause runtime issues
 
 EasyOCR requires a detection model which will be downloaded automatically during runtime.
 
+## Changing input image
+- The input image can be changed by editing the variable 'input_filename' at the top of main()
+
+## Console input syntax
+- [key] square brackets indicates key press
+- (key) round brackets indicates key entered into console
+
 ## Using extension program
-The program will first compute the bounding boxes for the licence plate as 
+- The program will first compute the bounding boxes for the licence plate as done in Main Task (progress can be seen in console)
+- After this is complete, the identified plate number and other letters detected will be output in console
+
+- A window will popup to allow the user to draw on the image to make modifications (instructions/help in console). NOTE: key presses should be done when selecting the window, rather than entering into console
+- Press [ESC] escape key to finish drawing session and move onto modification options
+- Modification options allows the user to either send the modified image back for detection again, or sharpen or blur the image for further editing
+- The user may also choose to quit/exit the program at this stage by entering (q) into the console
 
 # Troubleshooting
 Due to (probably) different versions of OpenCV not working consistently, if the extension program still generates an error, do the following:
