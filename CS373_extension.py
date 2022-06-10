@@ -1,6 +1,7 @@
 import math
 import sys
 from pathlib import Path
+from cv2 import WINDOW_NORMAL
 
 from matplotlib import pyplot
 from matplotlib.patches import Rectangle
@@ -448,81 +449,59 @@ class Queue:
 
 
 
-PEN_COLORS = {
-    "black": (0,0,0),
-    "white": (255,255,255)
-}
-pt1_x, pt1_y = None, None
 
-class Pen:
-    def __init__(self):
-        self.color = PEN_COLORS.get("black")
-        self.isDrawing = False # true if mouse is pressed
-        self.thickness = 3
-
-    def changeColor(self, color):
-        self.color = color
+def sharpenImg(img, sharpening_coeff):
+    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
     
-    def setThickness(self, thickness):
-        self.thickness = thickness
+    kernel = np.array([[0,-1,0], [-1,sharpening_coeff,-1], [0,-1,0]])
+    img = cv2.filter2D(img, -1, kernel)
 
-    def incrThickness(self):
-        self.thickness += 1
+    return img
+
+def blurImg(img):
+    # Gaussian 3x3 kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+
+    kernel = np.divide(np.array([[1,2,1], [2,4,2], [1,2,1]]), 16)
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
+        
+
+def detectPlateNumber(cropped_img):
+    # convert input image to readable file using cv2
+
+    # TODO: use initial_img instead
+    # cv2_grey_img = np.float32(np.zeros([image_height, image_width, 3]))
+    # for y in range(image_height):
+    #     for x in range(image_width):
+    #         cv2_grey_img[y][x] = initial_img[y][x]
+
+    reader = easyocr.Reader(['en'])
+    result = reader.readtext(cropped_img)
     
-    def decrThickness(self):
-        if self.thickness > 1:
-            self.thickness -= 1
+    # TODO: return larger text (see img 3)
 
-pen = Pen()
-orig_img = None
-drawing_img = None
+    plate_number = ""
+    other_letters = []
 
+    try:
+        result.sort(key=lambda item: item[2], reverse=True)
+        plate_number = str(result[0][-2])
 
+        for i in range(1,len(result)):
+            other_letters.append(result[i][-2])
 
-def drawLine(x, y):
-    cv2.line(drawing_img, (pt1_x,pt1_y),(x,y),color=pen.color,thickness=pen.thickness)
+        print("\n-------- Plate Number Detection Results --------")
+        print("- Identified licence plate number: '{}'".format(plate_number))
 
-# mouse callback function
-def mouseDrawing(event, x, y, flags, param):
-    global pt1_x, pt1_y, pen
+        if len(other_letters) != 0: 
+            print("- Identified other letter components: {}".format(other_letters))
 
-    if event == cv2.EVENT_LBUTTONDOWN:
-        pen.isDrawing = True
-        pt1_x,pt1_y = x,y
+    except:
+        print("Could not identify licence plate number")
 
-    elif event == cv2.EVENT_MOUSEMOVE:
-        if pen.isDrawing == True:
-            drawLine(x, y)
-            pt1_x,pt1_y = x,y
-    elif event == cv2.EVENT_LBUTTONUP:
-        pen.isDrawing = False
-        drawLine(x, y)
-
-
-def checkKeyboard():
-    global color, orig_img, drawing_img
-    k = cv2.waitKey(1) & 0xFF
-
-    if k == 27: # esc
-        return 1
-    elif k == ord("r"): 
-        print("Reset image")
-        drawing_img = orig_img.copy()
-    elif k == ord("1"): 
-        print("Switched to black")
-        pen.changeColor(PEN_COLORS.get("black"))
-    elif k == ord("2"): 
-        print("Switched to white")
-        pen.changeColor(PEN_COLORS.get("white"))
-    elif k == ord(","): 
-        print("Decreased thickness to {}".format(pen.thickness))
-        pen.decrThickness()
-    elif k == ord("."): 
-        print("Increased thickness to {}".format(pen.thickness))
-        pen.incrThickness()
+    return [plate_number, other_letters]
     
-    return 0
-
 
 
 
@@ -684,7 +663,6 @@ def main():
 
 
     # setup the plots for intermediate results in a figure
-    print("Displaying")
 
     DISPLAY_MODE = 2
     # 0 - original skeleton
@@ -737,107 +715,153 @@ def main():
             # plot the current figure
             pyplot.show()
 
-    elif DISPLAY_MODE == 2:
-        global orig_img, drawing_img
+    elif DISPLAY_MODE == 2: # EXTENSION: modifying cropped plate for detection
+        
+        global orig_img, saved_img, drawing_img
         orig_img = cropped_img.copy()
-        drawing_img = orig_img.copy()
+        saved_img = orig_img.copy()
 
         user_quit = False
 
         window_name = "Modify the licence plate"
 
         while not user_quit:
-            cv2.namedWindow(window_name)
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             cv2.setMouseCallback(window_name, mouseDrawing)
             cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1) # bring window to front
 
+            cv2.moveWindow(window_name, 300, 300)
+            cv2.resizeWindow(window_name, cropped_img.shape[1] * 4, cropped_img.shape[0] * 4)
+
             print(
-                "\nClick on the pop up window to draw on the image of the licence plate" +
-                "\n (1) Black pen" +
-                "\n (2) White pen" +
-                "\n (< or >) Change brush size" + 
-                "\n (ESC) Finish drawing")
+                "\nClick on the pop up window and use the following keys\n" +
+                "to draw on the image of the licence plate\n" +
+
+                "\n [1] Black pen" +
+                "\n [2] White pen" +
+                "\n [<] or [>] Change brush size" + 
+                "\n [c] Clear session changes" + 
+                "\n [r] Reset all changes" + 
+                "\n [ESC] Finish drawing session\n" +
+
+                "\nNote: you may need to manually resize the window to draw")
+
+            drawing_img = saved_img.copy()
+
             while True:
                 cv2.imshow(window_name, drawing_img)
                 if checkKeyboard() == 1:
                     break
-                
-            cv2.imwrite("testdir/modified_img.png", drawing_img)
+    
             cv2.destroyAllWindows()
 
             while True:
                 user_option = input(
-                    "\nSelect an action:" + 
+                    "\n-------- Licence Plate Modification --------\n" + 
                     "\n (1) Reread modified plate" + 
                     "\n (2) Sharpen image" + 
                     "\n (3) Blur image" + 
-                    "\n (q) Quit")
+                    "\n (q) Quit\n" + 
+                    "\nSelect an action: ")
 
                 if user_option == "1":
-                    detectPlateNumber(drawing_img)
+                    detectPlateNumber(saved_img)
                     break
                 elif user_option == "2":
-                    drawing_img = sharpenImg(drawing_img, SHARPENING_COEFF)
+                    saved_img = sharpenImg(saved_img, SHARPENING_COEFF)
                     break
                 elif user_option == "3":
-                    drawing_img = blurImg(drawing_img)
+                    saved_img = blurImg(saved_img)
                     break
                 elif user_option == "q" or user_option == "Q":
                     user_quit = True
                     break
 
 
-def sharpenImg(img, sharpening_coeff):
-    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+
+
+
+
+PEN_COLORS = {
+    "black": (0,0,0),
+    "white": (255,255,255)
+}
+pt1_x, pt1_y = None, None
+
+class Pen:
+    def __init__(self):
+        self.color = PEN_COLORS.get("black")
+        self.isDrawing = False # true if mouse is pressed
+        self.thickness = 3
+
+    def changeColor(self, color):
+        self.color = color
     
-    kernel = np.array([[0,-1,0], [-1,sharpening_coeff,-1], [0,-1,0]])
-    img = cv2.filter2D(img, -1, kernel)
+    def setThickness(self, thickness):
+        self.thickness = thickness
 
-    return img
-
-def blurImg(img):
-    # Gaussian 3x3 kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
-
-    kernel = np.divide(np.array([[1,2,1], [2,4,2], [1,2,1]]), 16)
-    img = cv2.filter2D(img, -1, kernel)
-
-    return img
-        
-
-def detectPlateNumber(cropped_img):
-    # convert input image to readable file using cv2
-
-    # TODO: use initial_img instead
-    # cv2_grey_img = np.float32(np.zeros([image_height, image_width, 3]))
-    # for y in range(image_height):
-    #     for x in range(image_width):
-    #         cv2_grey_img[y][x] = initial_img[y][x]
-
-   
+    def incrThickness(self):
+        self.thickness += 1
     
-    reader = easyocr.Reader(['en'])
-    result = reader.readtext(cropped_img)
-    print(result)
+    def decrThickness(self):
+        if self.thickness > 1:
+            self.thickness -= 1
+
+pen = Pen()
+orig_img, saved_img, drawing_img = None, None, None
+
+
+
+def drawLine(x, y):
+    cv2.line(drawing_img, (pt1_x,pt1_y),(x,y),color=pen.color,thickness=pen.thickness)
+
+# mouse callback function
+def mouseDrawing(event, x, y, flags, param):
+    global pt1_x, pt1_y, pen
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        pen.isDrawing = True
+        pt1_x,pt1_y = x,y
+
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if pen.isDrawing == True:
+            drawLine(x, y)
+            pt1_x,pt1_y = x,y
+    elif event == cv2.EVENT_LBUTTONUP:
+        pen.isDrawing = False
+        drawLine(x, y)
+
+
+def checkKeyboard():
+    global color, orig_img, saved_img, drawing_img
+    k = cv2.waitKey(1) & 0xFF
+
+    if k == 27: # esc
+        saved_img = drawing_img.copy()
+        return 1
+    elif k == ord("c"): 
+        print("Clear session changes")
+        drawing_img = saved_img.copy()
+    elif k == ord("r"): 
+        print("Reset all changes")
+        drawing_img = orig_img.copy()
+    elif k == ord("1"): 
+        print("Switched to black")
+        pen.changeColor(PEN_COLORS.get("black"))
+    elif k == ord("2"): 
+        print("Switched to white")
+        pen.changeColor(PEN_COLORS.get("white"))
+    elif k == ord(","): 
+        print("Decreased thickness to {}".format(pen.thickness))
+        pen.decrThickness()
+    elif k == ord("."): 
+        print("Increased thickness to {}".format(pen.thickness))
+        pen.incrThickness()
     
-    # TODO: return larger text (see img 3)
+    return 0
 
-    try:
-        result.sort(key=lambda item: item[2], reverse=True)
-        plate_number = str(result[0][-2])
 
-        other_letters = []
 
-        for i in range(1,len(result)):
-            other_letters.append(result[i][-2])
-
-        print("Identified licence plate number: '{}'".format(plate_number))
-        print("Identified other letter components: {}".format(other_letters))
-    except:
-        plate_number = ""
-        print("Could not identify licence plate number")
-
-    return plate_number
-    
 
 
 if __name__ == "__main__":
