@@ -1,7 +1,6 @@
 import math
 import sys
 from pathlib import Path
-from cv2 import WINDOW_NORMAL
 
 from matplotlib import pyplot
 from matplotlib.patches import Rectangle
@@ -451,7 +450,7 @@ def determinePlateBoundingBox(input_filename):
     (image_width, image_height, px_array_r, px_array_g, px_array_b) = readRGBImageToSeparatePixelArrays(input_filename)
 
     # STUDENT IMPLEMENTATION here
-    
+
     # Convert to single pixel array
     print("Converting image channels to single pixel array")
 
@@ -683,7 +682,7 @@ def checkKeyboard():
 
 
 
-# ========= Student defined constants
+# ========= Image processing constants for tweaking
 
 RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
 N_DILATIONS = 5
@@ -703,6 +702,8 @@ SHARPENING_COEFF = 5 # for licence letter detection
 def main():
     input_filename = "numberplate6.png"
 
+
+
     command_line_arguments = sys.argv[1:]
 
     SHOW_DEBUG_FIGURES = True
@@ -720,6 +721,9 @@ def main():
     if len(command_line_arguments) == 2:
         output_filename = Path(command_line_arguments[1])
 
+
+
+
     
     # MAIN plate detection output
     [
@@ -727,6 +731,8 @@ def main():
         (bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y),
         (initial_img, threshold_img, morph_img, component_img)
     ] = determinePlateBoundingBox(input_filename)
+
+
 
 
     # EXTENSION: licence plate number detection
@@ -743,12 +749,14 @@ def main():
     plate_number = detectPlateNumber(cropped_img)
 
 
+
+
     # setup the plots for intermediate results in a figure
 
     DISPLAY_MODE = 2
     # 0 - original skeleton
     # 1 - debugging for student
-    # 2 - drawing
+    # 2 - drawing extension
 
     if DISPLAY_MODE == 0 or DISPLAY_MODE == 1:
 
@@ -768,8 +776,6 @@ def main():
             axs1[1, 1].set_title('Final image of detection')
             axs1[1, 1].imshow(initial_img, cmap='gray')
 
-            axs1[1, 1].add_patch(rect)
-
         elif DISPLAY_MODE == 1:
             fig1, axs1 = pyplot.subplots(3, 2) # may be tweaked according to debugging requirements
             axs1[0,0].set_title('Threshold')
@@ -786,8 +792,8 @@ def main():
             axs1[2, 1].set_title('Cropped plate: {}'.format(plate_number))
             axs1[2, 1].imshow(cropped_img, cmap="gray")
 
-            axs1[1,1].add_patch(rect)
-        
+        axs1[1,1].add_patch(rect)
+
         # write the output image into output_filename, using the matplotlib savefig method
         extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
         pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
