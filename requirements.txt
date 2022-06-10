@@ -1,1 +1,4 @@
 matplotlib
+cv2
+numpy
+easyocr
