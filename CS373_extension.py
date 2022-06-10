@@ -8,6 +8,11 @@ from matplotlib.patches import Rectangle
 # import our basic, light-weight png reader library
 import imageIO.png
 
+# EXTENSION: import for licence plate reader
+import cv2
+import numpy as np
+import easyocr
+
 # program-wide constants (student defined)
 LOWER_RATIO = 1.5
 UPPER_RATIO = 5
@@ -62,6 +67,26 @@ def createInitializedGreyscalePixelArray(image_width, image_height, initValue = 
 
 # ======== STUDENT IMPLEMENTATION
 
+def computeHistogram(pixel_array, image_width, image_height, nr_bins):
+
+    histogram = [0 for i in range(nr_bins)]
+    bin_sum = [0 for i in range(nr_bins)]
+
+    bin_width = math.ceil(255/nr_bins)
+    
+    for i in range(image_height):
+        for j in range(image_width):
+            # if max = 255, and nr_bins = 8
+            # 255/8 = 31.875
+            # if p = 255, 255/31.875 = 8
+            
+            bin_index = math.floor(pixel_array[i][j]/bin_width)
+            
+            histogram[bin_index] += 1
+            bin_sum[bin_index] += pixel_array[i][j]
+
+    return [histogram, bin_sum]
+
 def convertToGreyscale(r, g, b, image_width, image_height):
     for y in range(image_height):
         for x in range(image_width):
@@ -69,6 +94,41 @@ def convertToGreyscale(r, g, b, image_width, image_height):
             r[y][x] = round(0.299*r[y][x] + 0.587*g[y][x] + 0.114*g[y][x])
     
     return r
+
+def getLowestMeanChannel(channels):
+    lowest_mean = 255
+    lowest_channel = []
+
+    for channel in channels:
+        channel_mean = computeArrayMean(channel)
+        if channel_mean < lowest_mean:
+            lowest_mean = channel_mean
+            lowest_channel = channel
+    
+    return lowest_channel
+
+def getLargestSDChannel(channels):
+    largest_SD = 0
+    selected_channel = channels[0] # temp assignment
+
+    for channel in channels:
+        mean = computeArrayMean(channel)
+        variances = []
+        
+        for row in range(len(channel)):
+            for col in range(len(channel[0])):
+                variances.append(math.pow(mean - channel[row][col], 2))
+            
+        channel_SD = math.sqrt(sum(variances)/len(variances))
+        if channel_SD > largest_SD: 
+            largest_SD = channel_SD
+            selected_channel = channel
+    
+    return selected_channel
+
+def computeArrayMean(array):
+    return sum(sum(array, [])) / (len(array) * len(array[0]))
+
 
 def contrastStretch(px_array, image_width, image_height):
 
@@ -139,6 +199,38 @@ def simpleThresholdToBinary(px_array, image_width, image_height, threshold, min=
             else: px_array[y][x] = max
     
     return px_array
+
+def adaptiveThresholdToBinary(px_array, image_width, image_height, min=0, max=255):
+    nr_bins = 32
+    [histogram, bin_sum] = computeHistogram(px_array, image_width, image_height, nr_bins)
+    bin_width = math.ceil(255/nr_bins)
+
+    threshold = sum(bin_sum) / sum(histogram)
+    print(threshold)
+
+    while True:
+        threshold_index = math.floor(threshold/bin_width)
+
+        lower_count = histogram[:threshold_index]
+        lower_sum = bin_sum[:threshold_index]
+        upper_count = histogram[threshold_index+1:]
+        upper_sum = bin_sum[threshold_index+1:]
+
+        lower_mean = sum(lower_sum) / sum(lower_count)
+        upper_mean = sum(upper_sum) / sum(upper_count)
+
+        new_threshold = 0.5 * (lower_mean + upper_mean)
+        print(new_threshold)
+
+        if new_threshold == threshold:
+            threshold = new_threshold
+            break
+
+        threshold = new_threshold
+
+    return simpleThresholdToBinary(px_array, image_width, image_height, threshold, min, max)
+
+
 
 
 def computeDilation8Nbh3x3FlatSE(px_array, image_width, image_height):
@@ -302,7 +394,7 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
         alignment_shortlist.append((component_val, longest_row_count/(max_x - min_x)))
 
     # sort by longest horizontal alignment degree
-    alignment_shortlist.sort(key=takeSecond, reverse=True)
+    alignment_shortlist.sort(key=lambda item: item[1], reverse=True)
 
     # return component value of component with greatest horizontal alignment degree
     if (len(alignment_shortlist) == 0):
@@ -315,8 +407,6 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
 def orderComponentsByLargest(components):
     return sorted(components.items(), key=lambda item: item[1], reverse=True)
 
-def takeSecond(element):
-    return element[1]
 
    
 
@@ -351,45 +441,9 @@ class Queue:
     def size(self):
         return len(self.items)
 
+# ============== MAIN TASK
 
-
-
-
-# This is our code skeleton that performs the license plate detection.
-# Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
-# we won't detect arbitrary or difficult to detect license plates!
-def main():
-
-    # ========= Student defined constants
-
-    RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
-    N_DILATIONS = 5
-    N_EROSIONS = 5
-
-    # how small the component dimensions compared to the image dimensions are
-    # to determine whether further opening is necessary
-    OPENING_THRESHOLD_FACTOR = 0.4
-
-    input_filename = "numberplate1.png"
-
-
-    command_line_arguments = sys.argv[1:]
-
-    SHOW_DEBUG_FIGURES = True
-
-    if command_line_arguments != []:
-        input_filename = command_line_arguments[0]
-        SHOW_DEBUG_FIGURES = False
-
-    output_path = Path("output_images")
-    if not output_path.exists():
-        # create output directory
-        output_path.mkdir(parents=True, exist_ok=True)
-
-    output_filename = output_path / Path(input_filename.replace(".png", "_output.png"))
-    if len(command_line_arguments) == 2:
-        output_filename = Path(command_line_arguments[1])
-
+def determinePlateBoundingBox(input_filename):
 
     # we read in the png file, and receive three pixel arrays for red, green and blue components, respectively
     # each pixel array contains 8 bit integer values between 0 and 255 encoding the color values
@@ -397,11 +451,25 @@ def main():
 
     # STUDENT IMPLEMENTATION here
 
-    # Convert to greyscale
+    # Convert to single pixel array
     print("Converting image channels to single pixel array")
-    px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
+
+    CONVERSION_METHOD = 2
+    # 0 - greyscale
+    # 1 - channel with lowest mean 
+    # 2 - channel with largest standard deviation
+
+    if CONVERSION_METHOD == 1:
+        px_array = getLowestMeanChannel([px_array_r, px_array_g, px_array_b])
+    elif CONVERSION_METHOD == 2:
+        px_array = getLargestSDChannel([px_array_r, px_array_g, px_array_b])
+    else:
+        px_array = convertToGreyscale(px_array_r, px_array_g, px_array_b, image_width, image_height)
 
     initial_img = px_array
+
+
+
 
     # Contrast stretching
     print("Applying contrast stretching")
@@ -414,9 +482,21 @@ def main():
     print("Applying contrast stretching")
     px_array = contrastStretch(px_array, image_width, image_height)
 
-    # Thresholding for segmentation (to binary with threshold=150, min=0 and max=1)
+
+
+    # Thresholding for segmentation (to binary with min=0 and max=1)
     print("Computing and applying threshold")
-    px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
+
+    THRESHOLDING_METHOD = 0
+    # 0 - simple thresholding
+    # 1 - adaptive thresholding
+
+    if THRESHOLDING_METHOD == 1: 
+        threshold_img = px_array = adaptiveThresholdToBinary(px_array, image_width, image_height)
+    else: 
+        threshold_img = px_array = simpleThresholdToBinary(px_array, image_width, image_height, RECOMMENDED_THRESHOLD, 0, 1)
+
+
 
     # Morphological operations
     print("Computing opening")
@@ -431,6 +511,8 @@ def main():
         print("Computing erosion " + str(i+1) + "/" + str(N_EROSIONS))
         px_array = computeErosion8Nbh3x3FlatSE(px_array, image_width, image_height)
 
+    morph_img = px_array
+
     # problem: images where the licence plate is small are more susceptible to "strings" which increase their bounding box
     bbox_min_x = bbox_max_x = bbox_min_y = bbox_max_y = 0
     prev_area = -1
@@ -441,6 +523,7 @@ def main():
         print("Computing connected components")
         [px_array, components] = computeConnectedComponentLabeling(px_array, image_width, image_height)
 
+        component_img = px_array
         component = computeLargestValidComponent(px_array, components, image_width, image_height)
 
         print("Computing component bounding box")
@@ -462,35 +545,331 @@ def main():
             print("No changes in component; finish repeated opening")
             break
 
-    # Draw a bounding box as a rectangle into the input image
-    print("Drawing bounding box")
-    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
-                     edgecolor='g', facecolor='none')
+    return (px_array_r,px_array_g,px_array_b), (bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y), (initial_img, threshold_img, morph_img, component_img)
 
-    # setup the plots for intermediate results in a figure
-    print("Displaying")
 
-    fig1, axs1 = pyplot.subplots(2, 2)
-    axs1[0, 0].set_title('Input red channel of image')
-    axs1[0, 0].imshow(px_array_r, cmap='gray')
-    axs1[0, 1].set_title('Input green channel of image')
-    axs1[0, 1].imshow(px_array_g, cmap='gray')
-    axs1[1, 0].set_title('Input blue channel of image')
-    axs1[1, 0].imshow(px_array_b, cmap='gray')
 
-    axs1[1, 1].set_title('Final image of detection')
-    axs1[1, 1].imshow(initial_img, cmap='gray')
 
-    axs1[1, 1].add_patch(rect)
+
+def sharpenImg(img, sharpening_coeff):
+    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+    
+    kernel = np.array([[0,-1,0], [-1,sharpening_coeff,-1], [0,-1,0]])
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
+
+def blurImg(img):
+    # Gaussian 3x3 kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+
+    kernel = np.divide(np.array([[1,2,1], [2,4,2], [1,2,1]]), 16)
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
         
 
-    # write the output image into output_filename, using the matplotlib savefig method
-    extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
-    pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
+def detectPlateNumber(cropped_img):
 
-    if SHOW_DEBUG_FIGURES:
-        # plot the current figure
-        pyplot.show()
+    reader = easyocr.Reader(['en'])
+    result = reader.readtext(cropped_img)
+
+    plate_number = ""
+    other_letters = []
+
+    try:
+        result.sort(key=lambda item: item[2], reverse=True)
+        plate_number = str(result[0][-2])
+
+        for i in range(1,len(result)):
+            other_letters.append(result[i][-2])
+
+        print("\n-------- Plate Number Detection Results --------")
+        print("- Identified licence plate number: '{}'".format(plate_number))
+
+        if len(other_letters) != 0: 
+            print("- Identified other letter components: {}".format(other_letters))
+
+    except:
+        print("Could not identify licence plate number")
+
+    return [plate_number, other_letters]
+    
+
+
+
+# =========== EXTENSION: Drawing functionality
+
+PEN_COLORS = {
+    "black": (0,0,0),
+    "white": (255,255,255)
+}
+pt1_x, pt1_y = None, None
+
+class Pen:
+    def __init__(self):
+        self.color = PEN_COLORS.get("black")
+        self.isDrawing = False # true if mouse is pressed
+        self.thickness = 3
+
+    def changeColor(self, color):
+        self.color = color
+    
+    def setThickness(self, thickness):
+        self.thickness = thickness
+
+    def incrThickness(self):
+        self.thickness += 1
+    
+    def decrThickness(self):
+        if self.thickness > 1:
+            self.thickness -= 1
+
+pen = Pen()
+orig_img, saved_img, drawing_img = None, None, None
+
+
+
+def drawLine(x, y):
+    cv2.line(drawing_img, (pt1_x,pt1_y),(x,y),color=pen.color,thickness=pen.thickness)
+
+# mouse callback function
+def mouseDrawing(event, x, y, flags, param):
+    global pt1_x, pt1_y, pen
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        pen.isDrawing = True
+        pt1_x,pt1_y = x,y
+
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if pen.isDrawing == True:
+            drawLine(x, y)
+            pt1_x,pt1_y = x,y
+    elif event == cv2.EVENT_LBUTTONUP:
+        pen.isDrawing = False
+        drawLine(x, y)
+
+
+def checkKeyboard():
+    global color, orig_img, saved_img, drawing_img
+    k = cv2.waitKey(1) & 0xFF
+
+    if k == 27: # esc
+        saved_img = drawing_img.copy()
+        return 1
+    elif k == ord("c"): 
+        print("Clear session changes")
+        drawing_img = saved_img.copy()
+    elif k == ord("r"): 
+        print("Reset all changes")
+        drawing_img = orig_img.copy()
+    elif k == ord("1"): 
+        print("Switched to black")
+        pen.changeColor(PEN_COLORS.get("black"))
+    elif k == ord("2"): 
+        print("Switched to white")
+        pen.changeColor(PEN_COLORS.get("white"))
+    elif k == ord(","): 
+        print("Decreased thickness to {}".format(pen.thickness))
+        pen.decrThickness()
+    elif k == ord("."): 
+        print("Increased thickness to {}".format(pen.thickness))
+        pen.incrThickness()
+    
+    return 0
+
+
+
+
+
+
+# ========= Image processing constants for tweaking
+
+RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
+N_DILATIONS = 5
+N_EROSIONS = 5
+
+# how small the component dimensions compared to the image dimensions are
+# to determine whether further opening is necessary
+OPENING_THRESHOLD_FACTOR = 0.4
+
+SHARPENING_COEFF = 5 # for licence letter detection
+
+
+
+# This is our code skeleton that performs the license plate detection.
+# Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
+# we won't detect arbitrary or difficult to detect license plates!
+def main():
+    input_filename = "numberplate6.png"
+
+
+
+    command_line_arguments = sys.argv[1:]
+
+    SHOW_DEBUG_FIGURES = True
+
+    if command_line_arguments != []:
+        input_filename = command_line_arguments[0]
+        SHOW_DEBUG_FIGURES = False
+
+    output_path = Path("output_images")
+    if not output_path.exists():
+        # create output directory
+        output_path.mkdir(parents=True, exist_ok=True)
+
+    output_filename = output_path / Path(input_filename.replace(".png", "_output.png"))
+    if len(command_line_arguments) == 2:
+        output_filename = Path(command_line_arguments[1])
+
+
+
+
+    
+    # MAIN plate detection output
+    [
+        (px_array_r,px_array_g,px_array_b), 
+        (bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y),
+        (initial_img, threshold_img, morph_img, component_img)
+    ] = determinePlateBoundingBox(input_filename)
+
+
+
+
+    # EXTENSION: licence plate number detection
+
+    # convert input image to readable file using cv2
+
+    cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
+
+    cv2_grey_img = blurImg(cv2_grey_img)
+    cv2_grey_img = sharpenImg(cv2_grey_img, SHARPENING_COEFF)
+
+    cropped_img = cv2_grey_img[bbox_min_y:bbox_max_y + 1, bbox_min_x:bbox_max_x + 1]
+
+    plate_number = detectPlateNumber(cropped_img)
+
+
+
+
+    # setup the plots for intermediate results in a figure
+
+    DISPLAY_MODE = 2
+    # 0 - original skeleton
+    # 1 - debugging for student
+    # 2 - drawing extension
+
+    if DISPLAY_MODE == 0 or DISPLAY_MODE == 1:
+
+        # Draw a bounding box as a rectangle into the input image
+        rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
+                     edgecolor='r', facecolor='none')
+
+        if DISPLAY_MODE == 0: 
+            fig1, axs1 = pyplot.subplots(2, 2)
+            axs1[0, 0].set_title('Input red channel of image')
+            axs1[0, 0].imshow(px_array_r, cmap='gray')
+            axs1[0, 1].set_title('Input green channel of image')
+            axs1[0, 1].imshow(px_array_g, cmap='gray')
+            axs1[1, 0].set_title('Input blue channel of image')
+            axs1[1, 0].imshow(px_array_b, cmap='gray')
+
+            axs1[1, 1].set_title('Final image of detection')
+            axs1[1, 1].imshow(initial_img, cmap='gray')
+
+        elif DISPLAY_MODE == 1:
+            fig1, axs1 = pyplot.subplots(3, 2) # may be tweaked according to debugging requirements
+            axs1[0,0].set_title('Threshold')
+            axs1[0,0].imshow(threshold_img, cmap='gray')
+            axs1[0,1].set_title('Morphological operations')
+            axs1[0,1].imshow(morph_img, cmap='gray')
+            axs1[1,0].set_title('Component labels')
+            axs1[1,0].imshow(component_img, cmap='gray')
+            axs1[1,1].set_title('Final image of detection')
+            axs1[1,1].imshow(initial_img, cmap='gray')
+
+            axs1[2, 0].set_title('cv2 Input')
+            axs1[2, 0].imshow(cv2_grey_img, cmap='gray')
+            axs1[2, 1].set_title('Cropped plate: {}'.format(plate_number))
+            axs1[2, 1].imshow(cropped_img, cmap="gray")
+
+        axs1[1,1].add_patch(rect)
+
+        # write the output image into output_filename, using the matplotlib savefig method
+        extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
+        pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
+
+        if SHOW_DEBUG_FIGURES:
+            # plot the current figure
+            pyplot.show()
+
+    elif DISPLAY_MODE == 2: # EXTENSION: modifying cropped plate for detection
+        
+        global orig_img, saved_img, drawing_img
+        orig_img = cropped_img.copy()
+        saved_img = orig_img.copy()
+
+        user_quit = False
+
+        window_name = "Modify the licence plate"
+
+        while not user_quit:
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(window_name, mouseDrawing)
+            cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1) # bring window to front
+
+            cv2.moveWindow(window_name, 300, 300)
+            cv2.resizeWindow(window_name, cropped_img.shape[1] * 4, cropped_img.shape[0] * 4)
+
+            print(
+                "\n-------- Licence Plate Drawing --------\n" + 
+                "Licence plate numbers incorrect? Want to hide some letters?\n" + 
+
+                "\nClick on the pop up window and use the following keys\n" +
+                "to correct it by drawing on the licence plate\n" +
+
+                "\n [1] Black pen" +
+                "\n [2] White pen" +
+                "\n [<] or [>] Change brush size" + 
+                "\n [c] Clear session changes" + 
+                "\n [r] Reset all changes" + 
+                "\n [ESC] Finish drawing session\n" +
+
+                "\nNote: you may need to manually resize the window to draw")
+
+            drawing_img = saved_img.copy()
+
+            while True:
+                cv2.imshow(window_name, drawing_img)
+                if checkKeyboard() == 1:
+                    break
+    
+            cv2.destroyAllWindows()
+
+            while True:
+                user_option = input(
+                    "\n-------- Modification Options --------\n" +                 
+                    "\n (1) Reread modified plate" + 
+                    "\n (2) Sharpen image" + 
+                    "\n (3) Blur image" + 
+                    "\n (q) Quit\n" + 
+
+                    "\n Hint: try blur and sharpen to increase detectability\n" + 
+
+                    "\nSelect an action: ")
+
+                if user_option == "1":
+                    detectPlateNumber(saved_img)
+                    break
+                elif user_option == "2":
+                    saved_img = sharpenImg(saved_img, SHARPENING_COEFF)
+                    break
+                elif user_option == "3":
+                    saved_img = blurImg(saved_img)
+                    break
+                elif user_option == "q" or user_option == "Q":
+                    user_quit = True
+                    break
+
 
 
 if __name__ == "__main__":
