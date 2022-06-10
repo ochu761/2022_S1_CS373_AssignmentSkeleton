@@ -669,11 +669,11 @@ def checkKeyboard():
         print("Switched to white")
         pen.changeColor(PEN_COLORS.get("white"))
     elif k == ord(","): 
-        print("Decreased thickness to {}".format(pen.thickness))
         pen.decrThickness()
+        print("Decreased thickness to {}".format(pen.thickness))
     elif k == ord("."): 
-        print("Increased thickness to {}".format(pen.thickness))
         pen.incrThickness()
+        print("Increased thickness to {}".format(pen.thickness))
     
     return 0
 
@@ -700,7 +700,7 @@ SHARPENING_COEFF = 5 # for licence letter detection
 # Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
 # we won't detect arbitrary or difficult to detect license plates!
 def main():
-    input_filename = "numberplate6.png"
+    input_filename = "numberplate1.png"
 
 
 
