@@ -11,7 +11,6 @@ import imageIO.png
 # EXTENSION: import for licence plate reader
 import cv2
 import numpy as np
-import imutils
 import easyocr
 
 # program-wide constants (student defined)
@@ -395,7 +394,7 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
         alignment_shortlist.append((component_val, longest_row_count/(max_x - min_x)))
 
     # sort by longest horizontal alignment degree
-    alignment_shortlist.sort(key=takeSecond, reverse=True)
+    alignment_shortlist.sort(key=lambda item: item[1], reverse=True)
 
     # return component value of component with greatest horizontal alignment degree
     if (len(alignment_shortlist) == 0):
@@ -408,8 +407,6 @@ def computeLargestValidComponent(px_array, components, image_width, image_height
 def orderComponentsByLargest(components):
     return sorted(components.items(), key=lambda item: item[1], reverse=True)
 
-def takeSecond(element):
-    return element[1]
 
    
 
@@ -448,6 +445,91 @@ class Queue:
 
 
 
+
+
+
+PEN_COLORS = {
+    "black": (0,0,0),
+    "white": (255,255,255)
+}
+pt1_x, pt1_y = None, None
+
+class Pen:
+    def __init__(self):
+        self.color = PEN_COLORS.get("black")
+        self.isDrawing = False # true if mouse is pressed
+        self.thickness = 3
+
+    def changeColor(self, color):
+        self.color = color
+    
+    def setThickness(self, thickness):
+        self.thickness = thickness
+
+    def incrThickness(self):
+        self.thickness += 1
+    
+    def decrThickness(self):
+        if self.thickness > 1:
+            self.thickness -= 1
+
+pen = Pen()
+orig_img = None
+drawing_img = None
+
+
+
+def drawLine(x, y):
+    cv2.line(drawing_img, (pt1_x,pt1_y),(x,y),color=pen.color,thickness=pen.thickness)
+
+# mouse callback function
+def mouseDrawing(event, x, y, flags, param):
+    global pt1_x, pt1_y, pen
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        pen.isDrawing = True
+        pt1_x,pt1_y = x,y
+
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if pen.isDrawing == True:
+            drawLine(x, y)
+            pt1_x,pt1_y = x,y
+    elif event == cv2.EVENT_LBUTTONUP:
+        pen.isDrawing = False
+        drawLine(x, y)
+
+
+def checkKeyboard():
+    global color, orig_img, drawing_img
+    k = cv2.waitKey(1) & 0xFF
+
+    if k == 27: # esc
+        return 1
+    elif k == ord("r"): 
+        print("Reset image")
+        drawing_img = orig_img.copy()
+    elif k == ord("1"): 
+        print("Switched to black")
+        pen.changeColor(PEN_COLORS.get("black"))
+    elif k == ord("2"): 
+        print("Switched to white")
+        pen.changeColor(PEN_COLORS.get("white"))
+    elif k == ord(","): 
+        print("Decreased thickness to {}".format(pen.thickness))
+        pen.decrThickness()
+    elif k == ord("."): 
+        print("Increased thickness to {}".format(pen.thickness))
+        pen.incrThickness()
+    
+    return 0
+
+
+
+
+
+
+
+
 # This is our code skeleton that performs the license plate detection.
 # Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
 # we won't detect arbitrary or difficult to detect license plates!
@@ -465,7 +547,7 @@ def main():
 
     SHARPENING_COEFF = 5 # for licence letter detection
 
-    input_filename = "numberplate1.png"
+    input_filename = "numberplate5.png"
 
 
 
@@ -593,6 +675,136 @@ def main():
 
     # EXTENSION: licence plate number detection
 
+    cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
+    cv2_grey_img = sharpenImg(cv2_grey_img, SHARPENING_COEFF)
+
+    cropped_img = cv2_grey_img[bbox_min_y:bbox_max_y + 1, bbox_min_x:bbox_max_x + 1]
+
+    plate_number = detectPlateNumber(cropped_img)
+
+
+    # setup the plots for intermediate results in a figure
+    print("Displaying")
+
+    DISPLAY_MODE = 2
+    # 0 - original skeleton
+    # 1 - debugging for student
+    # 2 - drawing
+
+    if DISPLAY_MODE == 0 or DISPLAY_MODE == 1:
+
+        # Draw a bounding box as a rectangle into the input image
+        rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
+                     edgecolor='r', facecolor='none')
+
+        if DISPLAY_MODE == 0: 
+            fig1, axs1 = pyplot.subplots(2, 2)
+            axs1[0, 0].set_title('Input red channel of image')
+            axs1[0, 0].imshow(px_array_r, cmap='gray')
+            axs1[0, 1].set_title('Input green channel of image')
+            axs1[0, 1].imshow(px_array_g, cmap='gray')
+            axs1[1, 0].set_title('Input blue channel of image')
+            axs1[1, 0].imshow(px_array_b, cmap='gray')
+
+            axs1[1, 1].set_title('Final image of detection')
+            axs1[1, 1].imshow(initial_img, cmap='gray')
+
+            axs1[1, 1].add_patch(rect)
+
+        elif DISPLAY_MODE == 1:
+            fig1, axs1 = pyplot.subplots(3, 2) # may be tweaked according to debugging requirements
+            axs1[0,0].set_title('Threshold')
+            axs1[0,0].imshow(threshold_img, cmap='gray')
+            axs1[0,1].set_title('Morphological operations')
+            axs1[0,1].imshow(morph_img, cmap='gray')
+            axs1[1,0].set_title('Component labels')
+            axs1[1,0].imshow(component_img, cmap='gray')
+            axs1[1,1].set_title('Final image of detection')
+            axs1[1,1].imshow(initial_img, cmap='gray')
+
+            axs1[2, 0].set_title('cv2 Input')
+            axs1[2, 0].imshow(cv2_grey_img, cmap='gray')
+            axs1[2, 1].set_title('Cropped plate: {}'.format(plate_number))
+            axs1[2, 1].imshow(cropped_img, cmap="gray")
+
+            axs1[1,1].add_patch(rect)
+        
+        # write the output image into output_filename, using the matplotlib savefig method
+        extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
+        pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
+
+        if SHOW_DEBUG_FIGURES:
+            # plot the current figure
+            pyplot.show()
+
+    elif DISPLAY_MODE == 2:
+        global orig_img, drawing_img
+        orig_img = cropped_img.copy()
+        drawing_img = orig_img.copy()
+
+        user_quit = False
+
+        window_name = "Modify the licence plate"
+
+        while not user_quit:
+            cv2.namedWindow(window_name)
+            cv2.setMouseCallback(window_name, mouseDrawing)
+            cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1) # bring window to front
+
+            print(
+                "\nClick on the pop up window to draw on the image of the licence plate" +
+                "\n (1) Black pen" +
+                "\n (2) White pen" +
+                "\n (< or >) Change brush size" + 
+                "\n (ESC) Finish drawing")
+            while True:
+                cv2.imshow(window_name, drawing_img)
+                if checkKeyboard() == 1:
+                    break
+                
+            cv2.imwrite("testdir/modified_img.png", drawing_img)
+            cv2.destroyAllWindows()
+
+            while True:
+                user_option = input(
+                    "\nSelect an action:" + 
+                    "\n (1) Reread modified plate" + 
+                    "\n (2) Sharpen image" + 
+                    "\n (3) Blur image" + 
+                    "\n (q) Quit")
+
+                if user_option == "1":
+                    detectPlateNumber(drawing_img)
+                    break
+                elif user_option == "2":
+                    drawing_img = sharpenImg(drawing_img, SHARPENING_COEFF)
+                    break
+                elif user_option == "3":
+                    drawing_img = blurImg(drawing_img)
+                    break
+                elif user_option == "q" or user_option == "Q":
+                    user_quit = True
+                    break
+
+
+def sharpenImg(img, sharpening_coeff):
+    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+    
+    kernel = np.array([[0,-1,0], [-1,sharpening_coeff,-1], [0,-1,0]])
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
+
+def blurImg(img):
+    # Gaussian 3x3 kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+
+    kernel = np.divide(np.array([[1,2,1], [2,4,2], [1,2,1]]), 16)
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
+        
+
+def detectPlateNumber(cropped_img):
     # convert input image to readable file using cv2
 
     # TODO: use initial_img instead
@@ -601,82 +813,31 @@ def main():
     #     for x in range(image_width):
     #         cv2_grey_img[y][x] = initial_img[y][x]
 
-    cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
-
-    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
-    
-    kernel = np.array([[0,-1,0], [-1,SHARPENING_COEFF,-1], [0,-1,0]])
-    cv2_grey_img = cv2.filter2D(cv2_grey_img, -1, kernel)
-
-    cropped_image = cv2_grey_img[bbox_min_y:bbox_max_y + 1, bbox_min_x:bbox_max_x + 1]
+   
     
     reader = easyocr.Reader(['en'])
-    result = reader.readtext(cropped_image)
+    result = reader.readtext(cropped_img)
     print(result)
     
     # TODO: return larger text (see img 3)
 
     try:
+        result.sort(key=lambda item: item[2], reverse=True)
         plate_number = str(result[0][-2])
-        print("Identified licence plate number: '{}' from file: '{}'".format(plate_number, input_filename))
+
+        other_letters = []
+
+        for i in range(1,len(result)):
+            other_letters.append(result[i][-2])
+
+        print("Identified licence plate number: '{}'".format(plate_number))
+        print("Identified other letter components: {}".format(other_letters))
     except:
         plate_number = ""
-        print("Could not identify licence plate number from file: '{}'".format(input_filename))
+        print("Could not identify licence plate number")
 
-
-
-    # Draw a bounding box as a rectangle into the input image
-    print("Drawing bounding box")
-    rect = Rectangle((bbox_min_x, bbox_min_y), bbox_max_x - bbox_min_x, bbox_max_y - bbox_min_y, linewidth=1,
-                     edgecolor='r', facecolor='none')
-
-    # setup the plots for intermediate results in a figure
-    print("Displaying")
-
-    DISPLAY_MODE = 1
-    # 0 - original skeleton
-    # 1 - debugging for student
-
-    if DISPLAY_MODE == 0:
-        fig1, axs1 = pyplot.subplots(2, 2)
-        axs1[0, 0].set_title('Input red channel of image')
-        axs1[0, 0].imshow(px_array_r, cmap='gray')
-        axs1[0, 1].set_title('Input green channel of image')
-        axs1[0, 1].imshow(px_array_g, cmap='gray')
-        axs1[1, 0].set_title('Input blue channel of image')
-        axs1[1, 0].imshow(px_array_b, cmap='gray')
-
-        axs1[1, 1].set_title('Final image of detection')
-        axs1[1, 1].imshow(initial_img, cmap='gray')
-
-        axs1[1, 1].add_patch(rect)
-
-    elif DISPLAY_MODE == 1:
-        fig1, axs1 = pyplot.subplots(3, 2) # may be tweaked according to debugging requirements
-        axs1[0,0].set_title('Threshold')
-        axs1[0,0].imshow(threshold_img, cmap='gray')
-        axs1[0,1].set_title('Morphological operations')
-        axs1[0,1].imshow(morph_img, cmap='gray')
-        axs1[1,0].set_title('Component labels')
-        axs1[1,0].imshow(component_img, cmap='gray')
-        axs1[1,1].set_title('Final image of detection')
-        axs1[1,1].imshow(initial_img, cmap='gray')
-
-        axs1[2, 0].set_title('cv2 Input')
-        axs1[2, 0].imshow(cv2_grey_img, cmap='gray')
-        axs1[2, 1].set_title('Cropped plate: {}'.format(plate_number))
-        axs1[2, 1].imshow(cropped_image, cmap="gray")
-
-        axs1[1,1].add_patch(rect)
-        
-
-    # write the output image into output_filename, using the matplotlib savefig method
-    extent = axs1[1,1].get_window_extent().transformed(fig1.dpi_scale_trans.inverted())
-    pyplot.savefig(output_filename, bbox_inches=extent, dpi=600)
-
-    if SHOW_DEBUG_FIGURES:
-        # plot the current figure
-        pyplot.show()
+    return plate_number
+    
 
 
 if __name__ == "__main__":
