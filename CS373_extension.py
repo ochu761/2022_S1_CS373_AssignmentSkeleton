@@ -444,109 +444,7 @@ class Queue:
 
 
 
-
-
-
-
-
-
-def sharpenImg(img, sharpening_coeff):
-    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
-    
-    kernel = np.array([[0,-1,0], [-1,sharpening_coeff,-1], [0,-1,0]])
-    img = cv2.filter2D(img, -1, kernel)
-
-    return img
-
-def blurImg(img):
-    # Gaussian 3x3 kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
-
-    kernel = np.divide(np.array([[1,2,1], [2,4,2], [1,2,1]]), 16)
-    img = cv2.filter2D(img, -1, kernel)
-
-    return img
-        
-
-def detectPlateNumber(cropped_img):
-    # convert input image to readable file using cv2
-
-    # TODO: use initial_img instead
-    # cv2_grey_img = np.float32(np.zeros([image_height, image_width, 3]))
-    # for y in range(image_height):
-    #     for x in range(image_width):
-    #         cv2_grey_img[y][x] = initial_img[y][x]
-
-    reader = easyocr.Reader(['en'])
-    result = reader.readtext(cropped_img)
-    
-    # TODO: return larger text (see img 3)
-
-    plate_number = ""
-    other_letters = []
-
-    try:
-        result.sort(key=lambda item: item[2], reverse=True)
-        plate_number = str(result[0][-2])
-
-        for i in range(1,len(result)):
-            other_letters.append(result[i][-2])
-
-        print("\n-------- Plate Number Detection Results --------")
-        print("- Identified licence plate number: '{}'".format(plate_number))
-
-        if len(other_letters) != 0: 
-            print("- Identified other letter components: {}".format(other_letters))
-
-    except:
-        print("Could not identify licence plate number")
-
-    return [plate_number, other_letters]
-    
-
-
-
-
-
-
-
-# This is our code skeleton that performs the license plate detection.
-# Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
-# we won't detect arbitrary or difficult to detect license plates!
-def main():
-
-    # ========= Student defined constants
-
-    RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
-    N_DILATIONS = 5
-    N_EROSIONS = 5
-
-    # how small the component dimensions compared to the image dimensions are
-    # to determine whether further opening is necessary
-    OPENING_THRESHOLD_FACTOR = 0.4
-
-    SHARPENING_COEFF = 5 # for licence letter detection
-
-    input_filename = "numberplate5.png"
-
-
-
-    command_line_arguments = sys.argv[1:]
-
-    SHOW_DEBUG_FIGURES = True
-
-    if command_line_arguments != []:
-        input_filename = command_line_arguments[0]
-        SHOW_DEBUG_FIGURES = False
-
-    output_path = Path("output_images")
-    if not output_path.exists():
-        # create output directory
-        output_path.mkdir(parents=True, exist_ok=True)
-
-    output_filename = output_path / Path(input_filename.replace(".png", "_output.png"))
-    if len(command_line_arguments) == 2:
-        output_filename = Path(command_line_arguments[1])
-
+def determinePlateBoundingBox(input_filename):
 
     # we read in the png file, and receive three pixel arrays for red, green and blue components, respectively
     # each pixel array contains 8 bit integer values between 0 and 255 encoding the color values
@@ -650,11 +548,124 @@ def main():
             print("No changes in component; finish repeated opening")
             break
 
+    return (px_array_r,px_array_g,px_array_b), (bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y), (initial_img, threshold_img, morph_img, component_img)
+
+
+
+
+
+def sharpenImg(img, sharpening_coeff):
+    # Sharpening kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+    
+    kernel = np.array([[0,-1,0], [-1,sharpening_coeff,-1], [0,-1,0]])
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
+
+def blurImg(img):
+    # Gaussian 3x3 kernel: https://en.wikipedia.org/wiki/Kernel_(image_processing)
+
+    kernel = np.divide(np.array([[1,2,1], [2,4,2], [1,2,1]]), 16)
+    img = cv2.filter2D(img, -1, kernel)
+
+    return img
+        
+
+def detectPlateNumber(cropped_img):
+
+    reader = easyocr.Reader(['en'])
+    result = reader.readtext(cropped_img)
+
+    plate_number = ""
+    other_letters = []
+
+    try:
+        result.sort(key=lambda item: item[2], reverse=True)
+        plate_number = str(result[0][-2])
+
+        for i in range(1,len(result)):
+            other_letters.append(result[i][-2])
+
+        print("\n-------- Plate Number Detection Results --------")
+        print("- Identified licence plate number: '{}'".format(plate_number))
+
+        if len(other_letters) != 0: 
+            print("- Identified other letter components: {}".format(other_letters))
+
+    except:
+        print("Could not identify licence plate number")
+
+    return [plate_number, other_letters]
+    
+
+
+
+# ========= Student defined constants
+
+RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
+N_DILATIONS = 5
+N_EROSIONS = 5
+
+# how small the component dimensions compared to the image dimensions are
+# to determine whether further opening is necessary
+OPENING_THRESHOLD_FACTOR = 0.4
+
+SHARPENING_COEFF = 5 # for licence letter detection
+
+
+
+# This is our code skeleton that performs the license plate detection.
+# Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
+# we won't detect arbitrary or difficult to detect license plates!
+def main():
+
+    # feel free to add more image filenames here
+    input_files = [
+        "numberplate1.png", 
+        "numberplate2.png", 
+        "numberplate3.png", 
+        "numberplate4.png", 
+        "numberplate5.png", 
+        "numberplate6.png", 
+    ]
+
+    input_filename = "numberplate6.png"
+
+
+
+    command_line_arguments = sys.argv[1:]
+
+    SHOW_DEBUG_FIGURES = True
+
+    if command_line_arguments != []:
+        input_filename = command_line_arguments[0]
+        SHOW_DEBUG_FIGURES = False
+
+    output_path = Path("output_images")
+    if not output_path.exists():
+        # create output directory
+        output_path.mkdir(parents=True, exist_ok=True)
+
+    output_filename = output_path / Path(input_filename.replace(".png", "_output.png"))
+    if len(command_line_arguments) == 2:
+        output_filename = Path(command_line_arguments[1])
+
+    
+    # MAIN plate detection output
+    [
+        (px_array_r,px_array_g,px_array_b), 
+        (bbox_min_x, bbox_max_x, bbox_min_y, bbox_max_y),
+        (initial_img, threshold_img, morph_img, component_img)
+    ] = determinePlateBoundingBox(input_filename)
 
 
     # EXTENSION: licence plate number detection
 
+    # convert input image to readable file using cv2
+
     cv2_grey_img = cv2.cvtColor(cv2.imread(input_filename), cv2.COLOR_BGR2GRAY)
+
+    cv2_grey_img = blurImg(cv2_grey_img)
     cv2_grey_img = sharpenImg(cv2_grey_img, SHARPENING_COEFF)
 
     cropped_img = cv2_grey_img[bbox_min_y:bbox_max_y + 1, bbox_min_x:bbox_max_x + 1]
@@ -734,8 +745,11 @@ def main():
             cv2.resizeWindow(window_name, cropped_img.shape[1] * 4, cropped_img.shape[0] * 4)
 
             print(
+                "\n-------- Licence Plate Drawing --------\n" + 
+                "Licence plate numbers incorrect? Want to hide some letters?\n" + 
+
                 "\nClick on the pop up window and use the following keys\n" +
-                "to draw on the image of the licence plate\n" +
+                "to correct it by drawing on the licence plate\n" +
 
                 "\n [1] Black pen" +
                 "\n [2] White pen" +
@@ -757,11 +771,14 @@ def main():
 
             while True:
                 user_option = input(
-                    "\n-------- Licence Plate Modification --------\n" + 
+                    "\n-------- Modification Options --------\n" +                 
                     "\n (1) Reread modified plate" + 
                     "\n (2) Sharpen image" + 
                     "\n (3) Blur image" + 
                     "\n (q) Quit\n" + 
+
+                    "\n Hint: try blur and sharpen to increase detectability\n" + 
+
                     "\nSelect an action: ")
 
                 if user_option == "1":
