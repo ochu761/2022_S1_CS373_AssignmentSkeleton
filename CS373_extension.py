@@ -442,7 +442,7 @@ class Queue:
     def size(self):
         return len(self.items)
 
-
+# ============== MAIN TASK
 
 def determinePlateBoundingBox(input_filename):
 
@@ -451,9 +451,7 @@ def determinePlateBoundingBox(input_filename):
     (image_width, image_height, px_array_r, px_array_g, px_array_b) = readRGBImageToSeparatePixelArrays(input_filename)
 
     # STUDENT IMPLEMENTATION here
-
-
-
+    
     # Convert to single pixel array
     print("Converting image channels to single pixel array")
 
@@ -600,6 +598,91 @@ def detectPlateNumber(cropped_img):
 
 
 
+# =========== EXTENSION: Drawing functionality
+
+PEN_COLORS = {
+    "black": (0,0,0),
+    "white": (255,255,255)
+}
+pt1_x, pt1_y = None, None
+
+class Pen:
+    def __init__(self):
+        self.color = PEN_COLORS.get("black")
+        self.isDrawing = False # true if mouse is pressed
+        self.thickness = 3
+
+    def changeColor(self, color):
+        self.color = color
+    
+    def setThickness(self, thickness):
+        self.thickness = thickness
+
+    def incrThickness(self):
+        self.thickness += 1
+    
+    def decrThickness(self):
+        if self.thickness > 1:
+            self.thickness -= 1
+
+pen = Pen()
+orig_img, saved_img, drawing_img = None, None, None
+
+
+
+def drawLine(x, y):
+    cv2.line(drawing_img, (pt1_x,pt1_y),(x,y),color=pen.color,thickness=pen.thickness)
+
+# mouse callback function
+def mouseDrawing(event, x, y, flags, param):
+    global pt1_x, pt1_y, pen
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        pen.isDrawing = True
+        pt1_x,pt1_y = x,y
+
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if pen.isDrawing == True:
+            drawLine(x, y)
+            pt1_x,pt1_y = x,y
+    elif event == cv2.EVENT_LBUTTONUP:
+        pen.isDrawing = False
+        drawLine(x, y)
+
+
+def checkKeyboard():
+    global color, orig_img, saved_img, drawing_img
+    k = cv2.waitKey(1) & 0xFF
+
+    if k == 27: # esc
+        saved_img = drawing_img.copy()
+        return 1
+    elif k == ord("c"): 
+        print("Clear session changes")
+        drawing_img = saved_img.copy()
+    elif k == ord("r"): 
+        print("Reset all changes")
+        drawing_img = orig_img.copy()
+    elif k == ord("1"): 
+        print("Switched to black")
+        pen.changeColor(PEN_COLORS.get("black"))
+    elif k == ord("2"): 
+        print("Switched to white")
+        pen.changeColor(PEN_COLORS.get("white"))
+    elif k == ord(","): 
+        print("Decreased thickness to {}".format(pen.thickness))
+        pen.decrThickness()
+    elif k == ord("."): 
+        print("Increased thickness to {}".format(pen.thickness))
+        pen.incrThickness()
+    
+    return 0
+
+
+
+
+
+
 # ========= Student defined constants
 
 RECOMMENDED_THRESHOLD = 150 # for thresholding for segmentation
@@ -618,20 +701,7 @@ SHARPENING_COEFF = 5 # for licence letter detection
 # Feel free to try it on your own images of cars, but keep in mind that with our algorithm developed in this lecture,
 # we won't detect arbitrary or difficult to detect license plates!
 def main():
-
-    # feel free to add more image filenames here
-    input_files = [
-        "numberplate1.png", 
-        "numberplate2.png", 
-        "numberplate3.png", 
-        "numberplate4.png", 
-        "numberplate5.png", 
-        "numberplate6.png", 
-    ]
-
     input_filename = "numberplate6.png"
-
-
 
     command_line_arguments = sys.argv[1:]
 
@@ -793,91 +863,6 @@ def main():
                 elif user_option == "q" or user_option == "Q":
                     user_quit = True
                     break
-
-
-
-
-
-
-PEN_COLORS = {
-    "black": (0,0,0),
-    "white": (255,255,255)
-}
-pt1_x, pt1_y = None, None
-
-class Pen:
-    def __init__(self):
-        self.color = PEN_COLORS.get("black")
-        self.isDrawing = False # true if mouse is pressed
-        self.thickness = 3
-
-    def changeColor(self, color):
-        self.color = color
-    
-    def setThickness(self, thickness):
-        self.thickness = thickness
-
-    def incrThickness(self):
-        self.thickness += 1
-    
-    def decrThickness(self):
-        if self.thickness > 1:
-            self.thickness -= 1
-
-pen = Pen()
-orig_img, saved_img, drawing_img = None, None, None
-
-
-
-def drawLine(x, y):
-    cv2.line(drawing_img, (pt1_x,pt1_y),(x,y),color=pen.color,thickness=pen.thickness)
-
-# mouse callback function
-def mouseDrawing(event, x, y, flags, param):
-    global pt1_x, pt1_y, pen
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-        pen.isDrawing = True
-        pt1_x,pt1_y = x,y
-
-    elif event == cv2.EVENT_MOUSEMOVE:
-        if pen.isDrawing == True:
-            drawLine(x, y)
-            pt1_x,pt1_y = x,y
-    elif event == cv2.EVENT_LBUTTONUP:
-        pen.isDrawing = False
-        drawLine(x, y)
-
-
-def checkKeyboard():
-    global color, orig_img, saved_img, drawing_img
-    k = cv2.waitKey(1) & 0xFF
-
-    if k == 27: # esc
-        saved_img = drawing_img.copy()
-        return 1
-    elif k == ord("c"): 
-        print("Clear session changes")
-        drawing_img = saved_img.copy()
-    elif k == ord("r"): 
-        print("Reset all changes")
-        drawing_img = orig_img.copy()
-    elif k == ord("1"): 
-        print("Switched to black")
-        pen.changeColor(PEN_COLORS.get("black"))
-    elif k == ord("2"): 
-        print("Switched to white")
-        pen.changeColor(PEN_COLORS.get("white"))
-    elif k == ord(","): 
-        print("Decreased thickness to {}".format(pen.thickness))
-        pen.decrThickness()
-    elif k == ord("."): 
-        print("Increased thickness to {}".format(pen.thickness))
-        pen.incrThickness()
-    
-    return 0
-
-
 
 
 
